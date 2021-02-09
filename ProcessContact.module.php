@@ -189,10 +189,10 @@ class ProcessContact extends Process {
     $page_maker_config = $this->modules->getConfig("PageMaker"); 
     $contact_system_pages = $page_maker_config["page_sets"]["contact_pages"]["setup"]["pages"];
 
-    // Check for live orders before uninstalling
+    // Check for active contacts before uninstalling
     if($this->inUse($this["contact_parents"])) { 
       
-      // There are active orders - abort uninstall
+      // There are active contacts - abort uninstall
       $this->error("The module could not be uninstalled as live data exists. If you want to proceed, you can remove all order data from the Admin/Contact page and try again.");
       $event->replace = true; // prevent uninstall
       $this->session->redirect("./edit?name=$class"); 
@@ -200,8 +200,8 @@ class ProcessContact extends Process {
     } else {
 
       /*
-      Safe to proceed - remove the fields and templates of the contact system pages - the parent, "Order Pages", 
-      Args are $recursive (remove children), $report_pg_errs false as pages as will already have been removed via the button on the Contact admin page
+      Safe to proceed - remove the fields and templates of the contact system pages
+      $report_pg_errs false as pages as will already have been removed via the button on the Contact admin page
       */
       $page_maker->removeSet("contact_pages", false);
 
