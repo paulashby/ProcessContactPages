@@ -122,17 +122,22 @@ class ProcessContact extends Process {
         ),
         "templates" => array(
           "{$prfx}-section" => array("t_parents" => array("{$prfx}-section")),
-          "{$prfx}-setting" => array("t_parents" => array("{$prfx}-section"), "t_fields"=>array("{$prfx}_markup", "{$prfx}_document")),
-          "{$prfx}-message" => array("t_parents" => array("{$prfx}-section"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_timestamp"))
+          "{$prfx}-section-active" => array("t_parents" => array("{$prfx}-section", "{$prfx}-section-active"), "t_children" => array("{$prfx}-section-active", "{$prfx}-message")),
+          "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
+          "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
+          "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
+          "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
+          "{$prfx}-message" => array("t_parents" => array("{$prfx}-section-active"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_timestamp"))
         ),
         "pages" => array(
           "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages"),
           "settings" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Settings"),
-          "forms" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
-          "documents" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
           "active" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Active"),
-          "contacts" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
-          "registrations" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
+          "documents" => array("template" => "{$prfx}-setting-documents", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
+          "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
+          "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
+          "conversations" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/contacts/", "title"=>"Conversations"),
+          "registrations" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "contact-actions" => array("template" => "{$prfx}-actions", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Contact Actions")
         )
       );
@@ -154,9 +159,9 @@ class ProcessContact extends Process {
         $init_settings = array(
           "fields" => array(
             "ck_editor_version_controlled" => array("{$prfx}_markup", "{$prfx}_document"), 
-            "html_ee" => array("{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_message", "{$prfx}_url")
+            "html_ee" => array("{$prfx}_message")
           ),
-          "templates" => array("{$prfx}-setting")
+          "templates" => array("{$prfx}-form", "{$prfx}-document")
         );
 
         $this->initPages($init_settings);
@@ -237,8 +242,7 @@ class ProcessContact extends Process {
     foreach($init_settings["fields"]["html_ee"] as $f_name){
       
       $f = wire("fields")->get($f_name);
-
-      $f->set("textformatters﻿", array("TextformatterEntities"));
+      $f->set("textformatters", array("TextformatterEntities"));
       $f->save();
     }
     foreach ($init_settings["templates"] as $t_name) {
