@@ -4,7 +4,7 @@ class ProcessContactPages extends Process {
 
   public static function getModuleinfo() {
     return [
-      "title" => "Process Contact",
+      "title" => "Process Contact Pages",
       "summary" => "Handles contact form submissions with GDPR integrations.",
       "author" => "Paul Ashby, primitive.co",
       "version" => 1,
@@ -32,7 +32,7 @@ class ProcessContactPages extends Process {
 
       $ajax_t = $this->templates->get("{$prfx}-actions");
       if(! $ajax_t) return;
-      $ajax_t->filename = wire("config")->paths->root . "site/modules/ProcessContactPages/{$prfx}-actions.php";
+      $ajax_t->filename = wire("config")->paths->root . "site/modules/ProcessContactPages/contact-actions.php";
       $ajax_t->save();
     }
   }
@@ -149,7 +149,7 @@ class ProcessContactPages extends Process {
         $init_settings = array(
           "fields" => array(
             "ck_editor" => array("{$prfx}_document"), 
-            "html_ee" => array("{$prfx}_message"),
+            "html_ee" => array("{$prfx}_message", "{$prfx}_document"),
             "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
           ),
           "vc_templates" => array("{$prfx}-form", "{$prfx}-document")
@@ -230,7 +230,7 @@ class ProcessContactPages extends Process {
 
     $vc_data = wire("modules")->getConfig("VersionControl");
 
-    foreach ($pages["fields"] as $field => $spec) {
+    foreach ($pgs["fields"] as $field => $spec) {
 
       $f = wire("fields")->get($field);
 
