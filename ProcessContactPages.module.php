@@ -1,6 +1,6 @@
 <?php namespace ProcessWire;
 
-class ProcessContact extends Process {
+class ProcessContactPages extends Process {
 
   public static function getModuleinfo() {
     return [
@@ -17,16 +17,6 @@ class ProcessContact extends Process {
       ],
     ];
   }
-
-  /*
-      State of play - 
-      • Was having trouble with Version Control throwing errors when installing.
-      Put PagerMaker before VersionControl in installs array and seemd to be OK.
-
-      • The HTML Entity Encoder formatters still aren't being applied to the supplied fields.
-
-    */
-
   public function ready() {
     $this->addHookBefore("Modules::saveConfig", $this, "customSaveConfig");
   }
@@ -42,7 +32,7 @@ class ProcessContact extends Process {
 
       $ajax_t = $this->templates->get("{$prfx}-actions");
       if(! $ajax_t) return;
-      $ajax_t->filename = wire("config")->paths->root . "site/modules/ProcessContact/{$prfx}-actions.php";
+      $ajax_t->filename = wire("config")->paths->root . "site/modules/ProcessContactPages/{$prfx}-actions.php";
       $ajax_t->save();
     }
   }
@@ -158,13 +148,14 @@ class ProcessContact extends Process {
 
         $init_settings = array(
           "fields" => array(
-            "ck_editor_version_controlled" => array("{$prfx}_markup", "{$prfx}_document"), 
-            "html_ee" => array("{$prfx}_message")
+            "ck_editor" => array("{$prfx}_document"), 
+            "html_ee" => array("{$prfx}_message"),
+            "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
           ),
-          "templates" => array("{$prfx}-form", "{$prfx}-document")
+          "vc_templates" => array("{$prfx}-form", "{$prfx}-document")
         );
 
-        $this->initPages($init_settings);
+        $this->initPages($pgs, $init_settings);
         $data["contact_root"] = $contact_root_path . "contact-pages";
 
         // Store titles of parent pages of live contact data pages
@@ -179,6 +170,17 @@ class ProcessContact extends Process {
       } 
       $event->arguments(1, $data);
     }    
+  }    
+/**
+ * Generate HTML markup for given form
+ *
+ * @param String $form - name of the required form
+ * @return String HTML markup
+ */
+  public function renderForm($form) {
+    $forms = $pages->get($this["contact_root"] . "/settings/forms");
+    $form_page = $forms->children("title={$form}");
+    return $form_page["{$prfx}_markup"];
   }
 /**
  * Custom uninstall 
@@ -224,28 +226,28 @@ class ProcessContact extends Process {
  *
  * @param Array $init_settings Contains arrays of field and template names to initialise
  */
-  protected function initPages($init_settings) {
+  protected function initPages($pgs, $init_settings) {
 
     $vc_data = wire("modules")->getConfig("VersionControl");
 
-    foreach($init_settings["fields"]["ck_editor_version_controlled"] as $f_name){
-      
-      $f = wire("fields")->get($f_name);
+    foreach ($pages["fields"] as $field => $spec) {
 
-      // Set fields to use CKEditor
-      $f->set('inputfieldClass', 'InputfieldCKEditor');
-      $f->save();
+      $f = wire("fields")->get($field);
 
-      // Activate version control
-      $vc_data["enabled_fields"][] = $f->id;
+      if(in_array($field, $init_settings["fields"]["ck_editor"])){
+        $f->set('inputfieldClass', 'InputfieldCKEditor');
+        $f->save();
+      }
+      if(in_array($field, $init_settings["fields"]["html_ee"])){
+        $f->set("textformatters", array("TextformatterEntities"));
+        $f->save();
+      }
+      if(in_array($field, $init_settings["fields"]["version_controlled"])){
+        // Activate version control
+        $vc_data["enabled_fields"][] = $f->id;
+      }
     }
-    foreach($init_settings["fields"]["html_ee"] as $f_name){
-      
-      $f = wire("fields")->get($f_name);
-      $f->set("textformatters", array("TextformatterEntities"));
-      $f->save();
-    }
-    foreach ($init_settings["templates"] as $t_name) {
+    foreach ($init_settings["vc_templates"] as $t_name) {
 
       // Activate version control
       $vc_data["enabled_templates"][] = wire("templates")->get($t_name)->id;
