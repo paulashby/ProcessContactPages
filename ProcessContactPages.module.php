@@ -154,6 +154,7 @@ class ProcessContactPages extends Process {
           "fields" => array(
             "ck_editor" => array("{$prfx}_document"), 
             "html_ee" => array("{$prfx}_message", "{$prfx}_document"),
+            "markup" => array("{$prfx}_markup"),
             "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
           ),
           "vc_templates" => array("{$prfx}-form", "{$prfx}-document")
@@ -182,6 +183,16 @@ class ProcessContactPages extends Process {
  * @return String HTML markup
  */
   public function renderForm($form) {
+    /*
+      Token - are we making different tokens for each form?
+      Is it possible they could be superceded by additional requests?
+      No -it's set on the session so ismunique to the user
+
+      Use HTML purifier
+
+
+
+    */
     $forms = $pages->get($this["contact_root"] . "/settings/forms");
     $form_page = $forms->children("title={$form}");
     return $form_page["{$prfx}_markup"];
@@ -244,6 +255,10 @@ class ProcessContactPages extends Process {
       }
       if(in_array($field, $init_settings["fields"]["html_ee"])){
         $f->set("textformatters", array("TextformatterEntities"));
+        $f->save();
+      }      
+      if(in_array($field, $init_settings["fields"]["markup"])){
+        $f->set("contentType", 1);
         $f->save();
       }
       if(in_array($field, $init_settings["fields"]["version_controlled"])){
