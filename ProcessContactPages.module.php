@@ -108,6 +108,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_url" => array("fieldtype"=>"FieldtypeURL", "label"=>"Contact website"),
           "{$prfx}_message" => array("fieldtype"=>"FieldtypeText", "label"=>"Message"),
+          "{$prfx}_consent" => array("fieldtype"=>"FieldtypeCheckbox", "label"=>"Consent given"),
           "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Timestamp")
         ),
         "templates" => array(
@@ -117,7 +118,7 @@ class ProcessContactPages extends Process {
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
-          "{$prfx}-message" => array("t_parents" => array("{$prfx}-section-active"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_timestamp"))
+          "{$prfx}-message" => array("t_parents" => array("{$prfx}-section-active"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp"))
         ),
         "pages" => array(
           "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages"),
