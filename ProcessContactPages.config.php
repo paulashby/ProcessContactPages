@@ -7,7 +7,7 @@ $config = array(
 	    "type" => "PageListSelect",
 	    "label" => "Where to install the contact system (can't be reset after installation)",
 	    "description" => "Please select a page for order storage - if no page is selected, the orders will be stored at '/contact/'", 
-		"required" => true
+	    "required" => false
 	),
 	"contactPrefix" => array(
 		"name"=> "prfx",
