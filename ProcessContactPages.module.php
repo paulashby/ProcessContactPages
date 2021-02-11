@@ -107,18 +107,21 @@ class ProcessContactPages extends Process {
           "{$prfx}_tel" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact tel"),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_url" => array("fieldtype"=>"FieldtypeURL", "label"=>"Contact website"),
-          "{$prfx}_message" => array("fieldtype"=>"FieldtypeText", "label"=>"Message"),
+          "{$prfx}_message" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact message"),
           "{$prfx}_consent" => array("fieldtype"=>"FieldtypeCheckbox", "label"=>"Consent given"),
-          "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Timestamp")
+          "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact timestamp")
         ),
         "templates" => array(
           "{$prfx}-section" => array("t_parents" => array("{$prfx}-section")),
           "{$prfx}-section-active" => array("t_parents" => array("{$prfx}-section", "{$prfx}-section-active"), "t_children" => array("{$prfx}-section-active", "{$prfx}-message")),
+          "{$prfx}-conversations" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message-contact")),
+          "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message-registration")),
           "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
-          "{$prfx}-message" => array("t_parents" => array("{$prfx}-section-active"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp"))
+          "{$prfx}-message-contact" => array("t_parents" => array("{$prfx}-conversations"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp")),
+          "{$prfx}-message-registration" => array("t_parents" => array("{$prfx}-registrations"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_tel", "{$prfx}_email", "{$prfx}_url", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp"))
         ),
         "pages" => array(
           "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages"),
@@ -127,8 +130,8 @@ class ProcessContactPages extends Process {
           "documents" => array("template" => "{$prfx}-setting-documents", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
           "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
-          "conversations" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/contacts/", "title"=>"Conversations"),
-          "registrations" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
+          "conversations" => array("template" => "{$prfx}-conversations", "parent"=>"{$contact_root_path}contact-pages/active/contacts/", "title"=>"Conversations"),
+          "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "contact-actions" => array("template" => "{$prfx}-actions", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Contact Actions")
         )
       );
