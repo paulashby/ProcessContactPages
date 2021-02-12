@@ -25,6 +25,9 @@ class ProcessContactPages extends Process {
     // include supporting files (css, js)
     parent::init();
 
+    $this->token_name = $this->session->CSRF->getTokenName("pcp_token");
+    $this->token_value = $this->session->CSRF->getTokenValue("pcp_token");
+
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
 
     if($this["configured"]){
@@ -153,7 +156,7 @@ class ProcessContactPages extends Process {
         $init_settings = array(
           "fields" => array(
             "ck_editor" => array("{$prfx}_document"), 
-            "html_ee" => array("{$prfx}_message", "{$prfx}_document"),
+            "html_ee" => array("{$prfx}_message"),
             "markup" => array("{$prfx}_markup"),
             "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
           ),
@@ -161,7 +164,13 @@ class ProcessContactPages extends Process {
         );
 
         $this->initPages($pgs, $init_settings);
-        $data["contact_root"] = $contact_root_path . "contact-pages";
+        $data["paths"] = array(
+          "forms" => $contact_root_path . "contact-pages/settings/forms",
+          "documents" => $contact_root_path . "contact-pages/settings/documents",
+          "conversations" => $contact_root_path . "contact-pages/active/contacts/conversations",
+          "registrations" => $contact_root_path . "contact-pages/active/registrations",
+          "ajax" => $contact_root_path . "contact-pages/contact-actions"
+        );
 
         // Store titles of parent pages of live contact data pages
         $data["contact_parents"] = array("forms", "documents", "contacts", "registrations");
@@ -183,20 +192,73 @@ class ProcessContactPages extends Process {
  * @return String HTML markup
  */
   public function renderForm($form) {
-    /*
-      Token - are we making different tokens for each form?
-      Is it possible they could be superceded by additional requests?
-      No -it's set on the session so ismunique to the user
 
-      Use HTML purifier
+    $prfx = $this["prfx"];
+    $open = "<div class='contact'>";
+    $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
+    $token_name = $this->token_name;
+    $token_value = $this->token_value;
 
+    $forms = wire("pages")->get($this["paths"]["forms"]);
+    $form_page = $forms->child("name=$form");
+    $raw_markup = $form_page["{$prfx}_markup"];
 
-    */
-    $forms = $pages->get($this["contact_root"] . "/settings/forms");
-    $form_page = $forms->children("title={$form}");
-    return $form_page["{$prfx}_markup"];
+    //TODO: Need user to add privacy policy - see ProcessContactNotes/AddingPrivacyPolicy.txt
+    $placeholders = array(
+      "url-placeholder" => wire("pages")->get($this["paths"]["ajax"])->url,
+      "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>",
+      "privacy-policy-placeholder" => "/"
+    );
+
+    // Replace placeholders with live values
+    foreach ($placeholders as $key => $value) {
+      $raw_markup = str_replace("<$key>", $value, $raw_markup);
+    }
+    $mark_up = $this->purifyFormMarkup($raw_markup);
+
+    return $open . $markup . $close;
   }
+  protected function purifyFormMarkup($arkup) {
+
+    // Allow forms for this function - see ProcessContactNotes/HTMLpurifier Set as Trusted.txt
+    $purifier = wire("modules")->get('MarkupHTMLPurifier');
+    $purifier->set('HTML.Trusted', true);
+    return $purifier->purify($markup);
+  }
+/**
+ * Get Privacy Policy data if exists 
+ * @return String HTML markup
+ */
+public function getPrivacyPolicy() {
+
+  $data = $this->tryPrivacyPolicy();
+  //TODO: Send email to concerned party - information officer if GDPR module is installed.
+  if(gettype($data) === "array") throw new WireException($data["error"]);
+  
+  $purifier = wire("modules")->get('MarkupHTMLPurifier');
+  return $purifier->purify($data);
+}
+/**
+ * Try to access HTML markup from CKEditor field on Privacy Policy page 
+ * @return String HTML markup or Array containing error message
+ */
+protected function tryPrivacyPolicy() {
+
+  $docs = wire("pages")->get($this["paths"]["documents"]);
+  $page = $docs->child("name=privacy-policy");
+
+  if($page->id){
+    $data = $page[$this["prfx"] . "_document"];
+
+    if($data){
+      return $data;
+    } else {
+      return array("error" => "Privacy Policy contains no data");
+    }
+  }
+  return array("error" => "Privacy Policy does not exist");  
+}
 /**
  * Custom uninstall 
  * 
