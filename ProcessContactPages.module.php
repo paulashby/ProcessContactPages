@@ -193,33 +193,52 @@ class ProcessContactPages extends Process {
  */
   public function renderForm($form) {
 
-    $prfx = $this["prfx"];
-    $open = "<div class='contact'>";
-    $close = "<p class='form__error form__error--submission'>No Error</p></div>";
+    if($this->privacyPolicyExists()){
+      $prfx = $this["prfx"];
+      $open = "<div class='contact'>";
+      $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
-    $token_name = $this->token_name;
-    $token_value = $this->token_value;
+      $token_name = $this->token_name;
+      $token_value = $this->token_value;
 
-    $forms = wire("pages")->get($this["paths"]["forms"]);
-    $form_page = $forms->child("name=$form");
-    $raw_markup = $form_page["{$prfx}_markup"];
+      $forms = wire("pages")->get($this["paths"]["forms"]);
+      $form_page = $forms->child("name=$form");
+      $raw_markup = $form_page["{$prfx}_markup"];
 
-    //TODO: Need user to add privacy policy - see ProcessContactNotes/AddingPrivacyPolicy.txt
-    $placeholders = array(
-      "url-placeholder" => wire("pages")->get($this["paths"]["ajax"])->url,
-      "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>",
-      "privacy-policy-placeholder" => "/"
-    );
+      //TODO: Need user to add privacy policy - see ProcessContactNotes/AddingPrivacyPolicy.txt
+      $placeholders = array(
+        "url-placeholder" => wire("pages")->get($this["paths"]["ajax"])->url,
+        "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>"
+      );
 
-    // Replace placeholders with live values
-    foreach ($placeholders as $key => $value) {
-      $raw_markup = str_replace("<$key>", $value, $raw_markup);
+      // Replace placeholders with live values
+      foreach ($placeholders as $key => $value) {
+        $raw_markup = str_replace("<$key>", $value, $raw_markup);
+      }
+      $markup = $this->purifyFormMarkup($raw_markup);
+
+      return $open . $markup . $close; 
     }
-    $mark_up = $this->purifyFormMarkup($raw_markup);
-
-    return $open . $markup . $close;
-  }
-  protected function purifyFormMarkup($arkup) {
+    throw new WireException("Privacy Policy could not be found");
+  }    
+/**
+ * Check for existence of Privacy Policy
+ *
+ * @return Boolean
+ */
+protected function privacyPolicyExists() {
+    $prfx = $this["prfx"];
+    $docs = wire("pages")->get($this["paths"]["documents"]);
+    $page = $docs->child("name=privacy-policy");
+    return $page->id && $page[$this["prfx"] . "_document"];
+  }    
+/**
+ * Run HTML purifier on form
+ *
+ * @param String $form - name of the required form
+ * @return String HTML markup
+ */
+protected function purifyFormMarkup($markup) {
 
     // Allow forms for this function - see ProcessContactNotes/HTMLpurifier Set as Trusted.txt
     $purifier = wire("modules")->get('MarkupHTMLPurifier');
@@ -227,23 +246,10 @@ class ProcessContactPages extends Process {
     return $purifier->purify($markup);
   }
 /**
- * Get Privacy Policy data if exists 
+ * Get HTML markup from CKEditor field on Privacy Policy page 
  * @return String HTML markup
  */
-public function getPrivacyPolicy() {
-
-  $data = $this->tryPrivacyPolicy();
-  //TODO: Send email to concerned party - information officer if GDPR module is installed.
-  if(gettype($data) === "array") throw new WireException($data["error"]);
-  
-  $purifier = wire("modules")->get('MarkupHTMLPurifier');
-  return $purifier->purify($data);
-}
-/**
- * Try to access HTML markup from CKEditor field on Privacy Policy page 
- * @return String HTML markup or Array containing error message
- */
-protected function tryPrivacyPolicy() {
+protected function getPrivacyPolicy() {
 
   $docs = wire("pages")->get($this["paths"]["documents"]);
   $page = $docs->child("name=privacy-policy");
@@ -252,12 +258,12 @@ protected function tryPrivacyPolicy() {
     $data = $page[$this["prfx"] . "_document"];
 
     if($data){
-      return $data;
-    } else {
-      return array("error" => "Privacy Policy contains no data");
+      $purifier = wire("modules")->get('MarkupHTMLPurifier');
+      return $purifier->purify($data);
     }
+    throw new WireException("Privacy Policy contains no data");
   }
-  return array("error" => "Privacy Policy does not exist");  
+  throw new WireException("Privacy Policy does not exist"); 
 }
 /**
  * Custom uninstall 
