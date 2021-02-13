@@ -195,17 +195,16 @@ class ProcessContactPages extends Process {
 
     if($this->privacyPolicyExists()){
       $prfx = $this["prfx"];
-      $open = "<div class='contact'>";
+      $form_script_url = $this->config->urls->site . "modules/ProcessContactPages/processcontactpages.js";
+      $open = "<script src='$form_script_url'></script><div class='contact'>";
       $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
       $token_name = $this->token_name;
       $token_value = $this->token_value;
 
-      $forms = wire("pages")->get($this["paths"]["forms"]);
-      $form_page = $forms->child("name=$form");
-      $raw_markup = $form_page["{$prfx}_markup"];
+      $form_page = wire("pages")->get("template={$prfx}-form, title=$form");
+      $markup = $form_page["{$prfx}_markup"];
 
-      //TODO: Need user to add privacy policy - see ProcessContactNotes/AddingPrivacyPolicy.txt
       $placeholders = array(
         "url-placeholder" => wire("pages")->get($this["paths"]["ajax"])->url,
         "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>"
@@ -213,10 +212,8 @@ class ProcessContactPages extends Process {
 
       // Replace placeholders with live values
       foreach ($placeholders as $key => $value) {
-        $raw_markup = str_replace("<$key>", $value, $raw_markup);
+        $markup = str_replace("<$key>", $value, $markup);
       }
-      $markup = $this->purifyFormMarkup($raw_markup);
-
       return $open . $markup . $close; 
     }
     throw new WireException("Privacy Policy could not be found");
@@ -227,24 +224,10 @@ class ProcessContactPages extends Process {
  * @return Boolean
  */
 protected function privacyPolicyExists() {
-    $prfx = $this["prfx"];
-    $docs = wire("pages")->get($this["paths"]["documents"]);
-    $page = $docs->child("name=privacy-policy");
-    return $page->id && $page[$this["prfx"] . "_document"];
-  }    
-/**
- * Run HTML purifier on form
- *
- * @param String $form - name of the required form
- * @return String HTML markup
- */
-protected function purifyFormMarkup($markup) {
-
-    // Allow forms for this function - see ProcessContactNotes/HTMLpurifier Set as Trusted.txt
-    $purifier = wire("modules")->get('MarkupHTMLPurifier');
-    $purifier->set('HTML.Trusted', true);
-    return $purifier->purify($markup);
-  }
+  $prfx = $this["prfx"];
+  $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
+  return $page->id && $page[$this["prfx"] . "_document"];
+}
 /**
  * Get HTML markup from CKEditor field on Privacy Policy page 
  * @return String HTML markup
