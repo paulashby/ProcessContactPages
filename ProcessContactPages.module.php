@@ -184,14 +184,36 @@ class ProcessContactPages extends Process {
       } 
       $event->arguments(1, $data);
     }    
+  }   
+/**
+ * Retrieve HTML markup for given document
+ *
+ * @param String $doc_title - title of the required document
+ * @return String HTML markup
+ */
+  public function renderDocument($doc_title) {
+
+     $prfx = $this["prfx"];
+     $page = wire("pages")->get("template={$prfx}-document, title=$doc_title");
+
+    if($page->id){
+      $data = $page["{$prfx}_document"];
+
+      if($data){
+        $purifier = wire("modules")->get('MarkupHTMLPurifier');
+        return $purifier->purify($data);
+      }
+      throw new WireException("$doc_title contains no data");
+    }
+    throw new WireException("$doc_title does not exist"); 
   }    
 /**
  * Generate HTML markup for given form
  *
- * @param String $form - name of the required form
+ * @param String $form - title of the required form
  * @return String HTML markup
  */
-  public function renderForm($form) {
+  public function renderForm($form_title) {
 
     if($this->privacyPolicyExists()){
       $prfx = $this["prfx"];
@@ -202,7 +224,7 @@ class ProcessContactPages extends Process {
       $token_name = $this->token_name;
       $token_value = $this->token_value;
 
-      $form_page = wire("pages")->get("template={$prfx}-form, title=$form");
+      $form_page = wire("pages")->get("template={$prfx}-form, title=$form_title");
       $markup = $form_page["{$prfx}_markup"];
 
       $placeholders = array(
@@ -227,26 +249,6 @@ protected function privacyPolicyExists() {
   $prfx = $this["prfx"];
   $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
   return $page->id && $page[$this["prfx"] . "_document"];
-}
-/**
- * Get HTML markup from CKEditor field on Privacy Policy page 
- * @return String HTML markup
- */
-protected function getPrivacyPolicy() {
-
-  $docs = wire("pages")->get($this["paths"]["documents"]);
-  $page = $docs->child("name=privacy-policy");
-
-  if($page->id){
-    $data = $page[$this["prfx"] . "_document"];
-
-    if($data){
-      $purifier = wire("modules")->get('MarkupHTMLPurifier');
-      return $purifier->purify($data);
-    }
-    throw new WireException("Privacy Policy contains no data");
-  }
-  throw new WireException("Privacy Policy does not exist"); 
 }
 /**
  * Custom uninstall 
