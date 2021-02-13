@@ -117,13 +117,13 @@ class ProcessContactPages extends Process {
         "templates" => array(
           "{$prfx}-section" => array("t_parents" => array("{$prfx}-section")),
           "{$prfx}-section-active" => array("t_parents" => array("{$prfx}-section", "{$prfx}-section-active"), "t_children" => array("{$prfx}-section-active", "{$prfx}-message")),
-          "{$prfx}-conversations" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message-contact")),
+          "{$prfx}-submitter" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message-contact")),
           "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message-registration")),
           "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
-          "{$prfx}-message-contact" => array("t_parents" => array("{$prfx}-conversations"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_email", "{$prfx}_tel", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp")),
+          "{$prfx}-message-contact" => array("t_parents" => array("{$prfx}-submitter"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_email", "{$prfx}_tel", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp")),
           "{$prfx}-message-registration" => array("t_parents" => array("{$prfx}-registrations"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_email", "{$prfx}_tel", "{$prfx}_url", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp"))
         ),
         "pages" => array(
@@ -133,7 +133,6 @@ class ProcessContactPages extends Process {
           "documents" => array("template" => "{$prfx}-setting-documents", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
           "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
-          "conversations" => array("template" => "{$prfx}-conversations", "parent"=>"{$contact_root_path}contact-pages/active/contacts/", "title"=>"Conversations"),
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "contact-actions" => array("template" => "{$prfx}-actions", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Contact Actions")
         )
@@ -167,7 +166,7 @@ class ProcessContactPages extends Process {
         $data["paths"] = array(
           "forms" => $contact_root_path . "contact-pages/settings/forms",
           "documents" => $contact_root_path . "contact-pages/settings/documents",
-          "conversations" => $contact_root_path . "contact-pages/active/contacts/conversations",
+          "contacts" => $contact_root_path . "contact-pages/active/contacts",
           "registrations" => $contact_root_path . "contact-pages/active/registrations",
           "ajax" => $contact_root_path . "contact-pages/contact-actions"
         );
@@ -239,17 +238,64 @@ class ProcessContactPages extends Process {
       return $open . $markup . $close; 
     }
     throw new WireException("Privacy Policy could not be found");
-  }    
+  }   
+/**
+ * Process form submission - create new entry in /contact-pages/active/contacts/submitter 
+ *
+ * @param Array $fparams - submitted with form
+ * @return JSON - success true with message or success false with conflated error message
+ */
+   public function processContactSubmission($params) {
+    /*
+
+      $params 
+      TOKEN1921230816X1613066048 => "32U/WkE65iLCFNtlRRCI4vumS3DeQxcc"
+      fname => "Paul"
+      lname => "Ashby"
+      email => "paul@primitive.co"
+      tel => "0756 827 7379"
+      message => "Hello"
+      consent => "granted"
+      */
+    $email = $params->email;
+    $prfx = $this["prfx"];
+    $submitter_tmplt = "{$prfx}-submitter";
+    $submitter = wire("pages")->get("template=$submitter_tmplt,email=$email");
+    $submitter_exists = $submitter->id;
+
+    if($submitter_exists){
+      $submission_parent = $submitter;
+    } else {
+      $submission_parent = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"]);
+    }
+    $submitter_tmplt = "{$prfx}-message-contact";
+
+    //TODO: Generate randon name and check it - something like this https://stackoverflow.com/questions/19853024/generate-unique-id-in-php
+    //TODO: Include Timestamp!
+    $item_data = array(
+      "{$prfx}_name_f" => $params["fname"],
+      "{$prfx}_name_l" => $params["lname"],
+      "{$prfx}_email" => $params["email"],
+      "{$prfx}_tel" => $params["tel"],
+      "{$prfx}_message" => $params["message"],
+      "{$prfx}_consent" => 1
+    );
+    $submission = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"], $item_data);
+
+    if( ! $submission->id) return array("error"=>"There was a problem submitting your message. Please try again later");
+    
+    return true;  
+  } 
 /**
  * Check for existence of Privacy Policy
  *
  * @return Boolean
  */
-protected function privacyPolicyExists() {
-  $prfx = $this["prfx"];
-  $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
-  return $page->id && $page[$this["prfx"] . "_document"];
-}
+  protected function privacyPolicyExists() {
+    $prfx = $this["prfx"];
+    $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
+    return $page->id && $page[$this["prfx"] . "_document"];
+  }
 /**
  * Custom uninstall 
  * 
