@@ -37,7 +37,7 @@ if($config->ajax) {
 				if(gettype($sanitized) === "string") {
 					return json_encode(array("success"=>false, "error"=>$sanitized));	
 				}
-				$submitted = $pcp->processContactSubmission($sanitized);
+				$submitted = $pcp->processSubmission($sanitized);
 
 				if($submitted["error"]){
 					return json_encode(array("success"=>false, "error"=>$submitted["error"]));
@@ -53,27 +53,54 @@ if($config->ajax) {
 function sanitizeSubmission($data, $sanitizer) {
 
 	$sanitized = array();
+	$errors = array();
 
 	foreach ($data as $field => $value) {
 
-		//TODO: Do we need to sanitize our checkboxes to make sure they ARE checkboxes?
-		if($field === 'fname' || $field === 'lname'){
-			//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
-			$sanitized[$field] = $sanitizer->text($value, array("stripQuotes"=>true));
-		} else if($field === 'tel'){
-			$sanitized[$field] = $sanitizer->digits($value);
-	      	if(strlen($sanitized[$field]) !== 11){
-	      		$errors[] = "Invalid telephone number, please try again.";
-	      	}
-	      } else if($field === 'email'){
-	      	$sanitized[$field] = $sanitizer->email($value);
-		  	if( ! strlen($sanitized[$field])){
-		    	$errors[] = "Invalid email, please try again.";
-		    }
-		} else if($field === 'message'){
-        	//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
-        	$sanitized[$field] = $sanitizer->textarea($value);
-        }
-    }
+		switch ($field) {
+	    	case 'fname':
+	    	case 'lname':
+		    	//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
+	    		$sanitized[$field] = $sanitizer->text($value, array("stripQuotes"=>true));
+	    		break;
+
+	    	case 'tel':
+	    		$sanitized[$field] = $sanitizer->digits($value);
+		      	if(strlen($sanitized[$field]) !== 11){
+		      		$errors[] = "Invalid telephone number, please try again.";
+		      	}
+		      	break;
+
+	    	case 'email':
+	    		$sanitized[$field] = $sanitizer->email($value);
+			  	if( ! strlen($sanitized[$field])){
+			    	$errors[] = "Invalid email, please try again.";
+			    }
+	    		break;
+
+	    	case 'url':
+	    		$sanitized[$field] = $sanitizer->url($value);
+			  	if( ! strlen($sanitized[$field])){
+			    	$errors[] = "Invalid website address, please try again.";
+			    }
+	    		break;
+
+	    	case 'message':
+	    		//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
+	    		$sanitized[$field] = $sanitizer->text($value, array("stripQuotes"=>true));
+	    		break;
+
+	    	case 'consent':	    		
+	        	$sanitized[$field] = $sanitizer->text($value);
+	        	if($sanitized[$field] !== "granted") {
+	        		$errors[] = "We need consent to store your data, please check the consent box and try again.";	
+	        	}
+	    		break;
+	    	
+	    	default:
+	    		// Do nothing
+	    		break;
+	    }
+	}
     return count($errors) ? implode(", ", $errors) : $sanitized;
 }
