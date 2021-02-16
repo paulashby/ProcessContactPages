@@ -29,15 +29,6 @@ class ProcessContactPages extends Process {
     $this->token_value = $this->session->CSRF->getTokenValue("pcp_token");
 
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
-
-    if($this["configured"]){
-      $prfx = $this["prfx"];
-
-      $ajax_t = $this->templates->get("{$prfx}-actions");
-      if(! $ajax_t) return;
-      $ajax_t->filename = wire("config")->paths->root . "site/modules/ProcessContactPages/contact-actions.php";
-      $ajax_t->save();
-    }
   }
 /**
  * Store info for created elements and pass to completeInstall function
@@ -90,41 +81,25 @@ class ProcessContactPages extends Process {
 
       $prfx = $data["prfx"];
 
-      // Make template to handle ajax calls
-      $ajax_t = new Template();
-      $ajax_t->name = "{$prfx}-actions";
-      $ajax_t->fieldgroup = $this->templates->get("basic-page")->fieldgroup;
-      $ajax_t->compile = 0;
-      $ajax_t->noPrependTemplateFile = true;
-      $ajax_t->noAppendTemplateFile = true; 
-      $ajax_t->save();
-
       // Create array of required pages containing three associative arrays whose member keys are the names of the respective elements
       $pgs = array(
         "fields" => array(
           "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup"),
           "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup"),
-          "{$prfx}_ref" => array("fieldtype"=>"FieldtypeInteger", "label"=>"Contact reference number"),
-          "{$prfx}_name_f" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact first name"),
-          "{$prfx}_name_l" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact last name"),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
-          "{$prfx}_url" => array("fieldtype"=>"FieldtypeURL", "label"=>"Contact website"),
-          "{$prfx}_tel" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact tel"),
-          "{$prfx}_message" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact message"),
-          "{$prfx}_consent" => array("fieldtype"=>"FieldtypeCheckbox", "label"=>"Consent given"),
-          "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact timestamp")
+          "{$prfx}_ref" => array("fieldtype"=>"FieldtypeInteger", "label"=>"Contact reference number"),
+          "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission")
         ),
         "templates" => array(
           "{$prfx}-section" => array("t_parents" => array("{$prfx}-section")),
           "{$prfx}-section-active" => array("t_parents" => array("{$prfx}-section", "{$prfx}-section-active"), "t_children" => array("{$prfx}-section-active", "{$prfx}-message")),
-          "{$prfx}-submitter" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message-contact")),
-          "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message-registration")),
+          "{$prfx}-submitter" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message"), "t_fields"=>array("{$prfx}_email")),
+          "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message")),
           "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
-          "{$prfx}-message-contact" => array("t_parents" => array("{$prfx}-submitter"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_email", "{$prfx}_tel", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp")),
-          "{$prfx}-message-registration" => array("t_parents" => array("{$prfx}-registrations"), "t_fields"=>array("{$prfx}_ref", "{$prfx}_name_f", "{$prfx}_name_l", "{$prfx}_email", "{$prfx}_tel", "{$prfx}_url", "{$prfx}_message", "{$prfx}_consent", "{$prfx}_timestamp"))
+          "{$prfx}-message" => array("t_parents" => array("{$prfx}-submitter"), "t_fields"=>array("{$prfx}_submission"))
         ),
         "pages" => array(
           "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages"),
@@ -134,7 +109,7 @@ class ProcessContactPages extends Process {
           "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
-          "contact-actions" => array("template" => "{$prfx}-actions", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Contact Actions")
+          "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"), 
         )
       );
 
@@ -155,7 +130,7 @@ class ProcessContactPages extends Process {
         $init_settings = array(
           "fields" => array(
             "ck_editor" => array("{$prfx}_document"), 
-            "html_ee" => array("{$prfx}_message"),
+            "html_ee" => array("{$prfx}_submission"),
             "markup" => array("{$prfx}_markup"),
             "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
           ),
@@ -167,12 +142,21 @@ class ProcessContactPages extends Process {
           "forms" => $contact_root_path . "contact-pages/settings/forms",
           "documents" => $contact_root_path . "contact-pages/settings/documents",
           "contacts" => $contact_root_path . "contact-pages/active/contacts",
-          "registrations" => $contact_root_path . "contact-pages/active/registrations",
-          "ajax" => $contact_root_path . "contact-pages/contact-actions"
+          "registrations" => $contact_root_path . "contact-pages/active/registrations"
         );
 
         // Store titles of parent pages of live contact data pages
         $data["contact_parents"] = array("forms", "documents", "contacts", "registrations");
+
+        // Store initial value of next_id for use when adding new users to the system (form submissions/registration requests)
+        $data["next_id"] = "1";
+
+        // Add ref field to user template - this will be populated only for users added via registration form
+        $usr_template = wire("templates")->get("user");
+        $ufg = $usr_template->fieldgroup;
+        $f = wire("templates")->get("{$prfx}_ref");
+        $ufg->add($f);
+        $ufg->save();
 
       } else {
         
@@ -227,7 +211,6 @@ class ProcessContactPages extends Process {
       $markup = $form_page["{$prfx}_markup"];
 
       $placeholders = array(
-        "url-placeholder" => wire("pages")->get($this["paths"]["ajax"])->url,
         "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>"
       );
 
@@ -237,54 +220,76 @@ class ProcessContactPages extends Process {
       }
       return $open . $markup . $close; 
     }
-    throw new WireException("Privacy Policy could not be found");
-  }   
+    throw new WireException("Privacy Policy must be populated before forms can be submitted");
+  }
 /**
  * Process form submission - create new entry in /contact-pages/active/contacts/submitter 
  *
- * @param Array $fparams - submitted with form
+ * @param Array $fparams - submitted with form - these MUST be pre-santized and validated
  * @return JSON - success true with message or success false with conflated error message
  */
    public function processContactSubmission($params) {
-    /*
 
-      $params 
-      TOKEN1921230816X1613066048 => "32U/WkE65iLCFNtlRRCI4vumS3DeQxcc"
-      fname => "Paul"
-      lname => "Ashby"
-      email => "paul@primitive.co"
-      tel => "0756 827 7379"
-      message => "Hello"
-      consent => "granted"
-      */
-    $email = $params->email;
+    $date = date_create();
+    $params["timestamp"] = date_timestamp_get($date);
+    $email = $params["email"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
-    $submitter = wire("pages")->get("template=$submitter_tmplt,email=$email");
+    $submitter = wire("pages")->get("template=$submitter_tmplt,{$prfx}_email=$email");
+    bd("template=$submitter_tmplt,{$prfx}_email=$email", "selector");
     $submitter_exists = $submitter->id;
-
+    bd($submitter_exists, "submitter_exists");
     if($submitter_exists){
       $submission_parent = $submitter;
     } else {
-      $submission_parent = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"]);
+      $item_data = array(
+        "title" => $this->getID(),
+        "{$prfx}_email" => $email
+      );
+      $submission_parent = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"], $item_data);
     }
-    $submitter_tmplt = "{$prfx}-message-contact";
+    $submissions_from_usr = $submission_parent->numChildren();
+    $submissions_from_usr++;
 
-    //TODO: Generate randon name and check it - something like this https://stackoverflow.com/questions/19853024/generate-unique-id-in-php
-    //TODO: Include Timestamp!
+    $title_sffx = "-$submissions_from_usr";
+    $submitter_tmplt = "{$prfx}-message";
+    
     $item_data = array(
-      "{$prfx}_name_f" => $params["fname"],
-      "{$prfx}_name_l" => $params["lname"],
+      "title" => $submission_parent->title . $title_sffx,
       "{$prfx}_email" => $params["email"],
-      "{$prfx}_tel" => $params["tel"],
-      "{$prfx}_message" => $params["message"],
-      "{$prfx}_consent" => 1
+      "{$prfx}_submission" => json_encode($params)
     );
-    $submission = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"], $item_data);
+    $submission = wire("pages")->add($submitter_tmplt, $submission_parent->url, $item_data);
 
     if( ! $submission->id) return array("error"=>"There was a problem submitting your message. Please try again later");
     
     return true;  
+  }  
+/**
+ * Get id string for submission from new contact
+ *
+ * @return String - the id
+ */
+  protected function getID() {
+    $next_id = $this["next_id"];
+    $id = ucfirst($this["prfx"]) . "-$next_id";
+    $settings = wire("modules")->getConfig($this->className);
+    $next_id++;
+    $settings["next_id"] = $next_id;
+    wire("modules")->saveConfig($this->className, $settings);
+    return $id;
+  }
+/**
+ * Retrieve historical contact form submission
+ *
+ * @param Boolean $parse_as_array - return array, else object
+ * @return Array or Object
+ */
+  protected function getContactSubmission($parse_as_array = false) {
+    // This will be called when accessing historical submissions which are stored as JSON strings in textarea fields
+    
+    // If parse_as_array is true this will return an array, else an object
+    $submission = json_decode($sanitizer->unentities($json), $parse_as_array);
   } 
 /**
  * Check for existence of Privacy Policy
@@ -326,12 +331,6 @@ class ProcessContactPages extends Process {
       */
       $page_maker->removeSet("contact_pages", false);
 
-      // Remove the ajax template that was installed by init()
-      $prefix = $this["prfx"];
-      $ajax_t = $this->templates->get("{$prefix}-actions");
-      if($ajax_t) {
-        wire('templates')->delete($ajax_t);
-      }
       parent::uninstall();
     } 
   }
