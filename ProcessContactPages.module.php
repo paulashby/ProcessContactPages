@@ -294,14 +294,15 @@ class ProcessContactPages extends Process {
 /**
  * Retrieve historical contact form submission
  *
+ * @param String $encoded_str - JSON string with HTML entity encoding
  * @param Boolean $parse_as_array - return array, else object
  * @return Array or Object
  */
-  protected function getContactSubmission($parse_as_array = false) {
+  protected function getContactSubmission($encoded_str, $parse_as_array = false) {
     // This will be called when accessing historical submissions which are stored as JSON strings in textarea fields
-    
     // If parse_as_array is true this will return an array, else an object
-    $submission = json_decode($sanitizer->unentities($json), $parse_as_array);
+    $data = json_decode(wire("sanitizer")->unentities($encoded_str));
+    return $parse_as_array ? get_object_vars($data) : $data;
   } 
 /**
  * Check for existence of Privacy Policy
@@ -422,6 +423,90 @@ class ProcessContactPages extends Process {
 
   // Contact page
   public function ___execute() {
-    return "Hello world";
+    return $this->getTable("registrations");
+  }
+/**
+ * Make a table showing orders for the provided steps
+ *
+ * @param String $submission_type "contacts" or "registrations"
+ * @return Table markup
+ */ 
+  protected function getTable($submission_type) {
+
+    $table = $this->modules->get("MarkupAdminDataTable");
+    $table->setEncodeEntities(false); // Parse form HTML
+    $table_rows = array();
+
+    $prfx = $this["prfx"];
+    $submitter_tmplt = "{$prfx}-submitter";
+    $submitter_parent = $submission_type;
+    $parent_str = $this["paths"][$submission_type];
+    $submissions = wire("pages")->get($parent_str); // This is the Contacts page - children should be the pages with email field
+    
+    $records = array();
+
+    $header_row_settings = array();
+
+    foreach ($submissions->children() as $submitter) {
+      
+      foreach ($submitter->children() as $submission) {
+        $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+
+        $record = array(
+          "name" => $submission_data["fname"] . " " . $submission_data["lname"]
+        ); 
+        if(array_key_exists("timestamp", $submission_data)){
+          
+          // Convert timestamp to formatted string
+          $date = date_create();
+          $submission_data["date"] = date('Y-m-d', $submission_data["timestamp"]);
+        }
+        foreach ($submission_data as $key => $value) {
+          
+          $should_display = $key !== "fname" && $key !== "lname" && $key !== "consent" && $key !== "timestamp";
+
+          if($should_display){
+            $record[$key] = $value;
+          } 
+        }
+        ksort($record);
+        $header_row_settings = array_unique(array_merge($header_row_settings, array_keys($record)));
+        $records[] = $record;
+      }
+    }
+    if(count($records)){
+      ksort($header_row_settings);
+      $table->headerRow($header_row_settings);
+
+      foreach ($this->getTableRows($records, $header_row_settings) as $row_out) {
+        $table->row($row_out);
+      }
+      $out = $table->render();
+      return $out;
+    }
+    return "No pending $submission_type";
+  }  
+/**
+ * Add records as table rows 
+ *
+ * @param Array $records - contains arrays of user-submitted data as name value pairs ("email=>"paul@primitive.co" etc) 
+ * @param Array $column_keys - list of column heading strings
+ * @return array of table rows
+ */ 
+  protected function getTableRows($records, $column_keys) {
+
+    $table_rows = array();
+
+    foreach ($records as $record) {
+
+      $table_row = array();
+
+      foreach ($column_keys as $record_item) {
+        // "Not provided" when $record_item not in record
+        $table_row[] = array_key_exists($record_item, $record) ? $record[$record_item] : "Not provided";
+      }
+      $table_rows[] = $table_row;
+    }
+    return $table_rows;
   }
 }
