@@ -19,6 +19,7 @@ if($config->ajax) {
 
 				if($bot){
 					// TODO: send email to system administrator (yes, me)?
+					// Log bot activity
 					$ipf = "UNAVAILABLE";
 					if(isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
 						$ipf = $_SERVER['HTTP_X_FORWARDED_FOR'];
@@ -30,19 +31,31 @@ if($config->ajax) {
 					return json_encode(array("success"=>false, "error"=>"The form contained erros")); 
 				}
 
+				// No consent
 				if(! isset($params->consent)) return json_encode(array("success"=>false, "error"=>"Please consent to the storage of your information so we can process your message"));
+
+				if(property_exists($params, "submission_type")){
+					$submission_type = $params->submission_type;
+					unset($params->submission_type); // Don't want stored in submission field with other params. Don't need to sanitize as not user input
+				} else {
+					return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
+				}
 
 				$sanitized = sanitizeSubmission($params, $sanitizer);
 
 				if(gettype($sanitized) === "string") {
+					// Error string returned
 					return json_encode(array("success"=>false, "error"=>$sanitized));	
 				}
-				$submitted = $pcp->processSubmission($sanitized);
+				// Form santized and validated - pass to ProcessContactPages module for processing
+				$submitted = $pcp->processSubmission($sanitized, $submission_type);
 
 				if($submitted["error"]){
 					return json_encode(array("success"=>false, "error"=>$submitted["error"]));
 				}
 				return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible")); 
+			} else {
+				return json_encode(array("success"=>false, "error"=>"The form contained no data"));
 			}
 		} else {
 			return json_encode(array("success"=>false, "error"=>"The form contained no input"));

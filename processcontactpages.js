@@ -4,16 +4,19 @@ var Contact = (function () {
 
     var setup = {
     	success_callbacks : {
-	        add: function (e, data) {
+	        contact: function (e, data) {
 	        	//TODO: Provide success feedback - need this for when return is hit after changing quantity
-	        	updateCart('add', data);
+	        	console.log('contact callback');
+	        },
+	        registration: function (e, data) {
+	        	//TODO: Provide success feedback - need this for when return is hit after changing quantity
+	        	console.log('registration callback');
 	        }
 	    }
 	};
 	var actions = {
 	};
 
-	// https://www.sitepoint.com/jquery-document-ready-plain-javascript/
 	if 	(document.readyState === "complete" ||
 		(document.readyState !== "loading" && !document.documentElement.doScroll)) {
 	  	
@@ -31,35 +34,12 @@ var Contact = (function () {
 	    	dataAttrEventHandler(e, actions); 
 	    }, false);
 
-	    actions.submit = function (e) {
-
-	    	var token = document.getElementById('contact_token');
-	    	var form = e.target.closest('form');
-	    	var params = {};
-			for (var i = 0, ii = form.length; i < ii; ++i) {
-				var input = form[i];
-				if (input.name) {
-					if(uncheckedBox(input) || input.value.length < 1){
-						continue;
-					} else {
-						params[input.name] = input.value;
-					}
-				}
-			}
-	    	var settings = {
-				e: e,
-				action: 'submit',
-				token: {
-					name: token.name,
-					value: token.value
-				},
-				params: params,
-				action_url: e.target.dataset.actionurl,
-				method: 'POST'
-			};
-			doAction(settings);
+	    actions.contact = function (e) {
+	    	processForm(e, 'contact');
 		}
-
+		actions.registration = function (e) {
+	    	processForm(e, 'registration');
+		}
 		actions.privacy = function (e) {
 
 	    	var token = document.getElementById('contact_token');
@@ -103,6 +83,36 @@ var Contact = (function () {
         makeRequest(options);
         settings.e.preventDefault();
 	}
+	function processForm (e, submission_type) {
+
+		var token = document.getElementById('submission_token');
+    	var form = e.target.closest('form');
+    	var params = {
+    		submission_type: submission_type
+    	};
+		for (var i = 0, ii = form.length; i < ii; ++i) {
+			var input = form[i];
+			if (input.name) {
+				if(uncheckedBox(input) || input.value.length < 1){
+					continue;
+				} else {
+					params[input.name] = input.value;
+				}
+			}
+		}
+    	var settings = {
+			e: e,
+			action: submission_type,
+			token: {
+				name: token.name,
+				value: token.value
+			},
+			params: params,
+			action_url: e.target.dataset.actionurl,
+			method: 'POST'
+		};
+		doAction(settings);
+	}
 	function makeRequest (options) {
 
 		var xhttp = new XMLHttpRequest();
@@ -112,6 +122,7 @@ var Contact = (function () {
 		    	xhttp.getAllResponseHeaders();
 		    	
 		    	var response = JSON.parse(this.response);
+		    	console.log(response);
 
 		    	if(response.error) {
 		    		//TODO: Does this need handling?

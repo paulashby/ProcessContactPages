@@ -194,14 +194,14 @@ class ProcessContactPages extends Process {
  * Generate HTML markup for given form
  *
  * @param String $form - title of the required form
+ * @param String $handler_url - path to js file to handle form submission
  * @return String HTML markup
  */
-  public function renderForm($form_title) {
+  public function renderForm($form_title, $handler_url) {
 
     if($this->privacyPolicyExists()){
       $prfx = $this["prfx"];
-      $form_script_url = $this->config->urls->site . "modules/ProcessContactPages/processcontactpages.js";
-      $open = "<script src='$form_script_url'></script><div class='contact'>";
+      $open = "<script src='$handler_url'></script><div class='contact'>";
       $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
       $token_name = $this->token_name;
@@ -211,7 +211,7 @@ class ProcessContactPages extends Process {
       $markup = $form_page["{$prfx}_markup"];
 
       $placeholders = array(
-        "csrf-token-placeholder" => "<input type='hidden' id='contact_token' name='$token_name' value='$token_value'>"
+        "csrf-token-placeholder" => "<input type='hidden' id='submission_token' name='$token_name' value='$token_value'>"
       );
 
       // Replace placeholders with live values
@@ -226,27 +226,39 @@ class ProcessContactPages extends Process {
  * Process form submission - create new entry in /contact-pages/active/contacts/submitter 
  *
  * @param Array $fparams - submitted with form - these MUST be pre-santized and validated
+ * @param String $submission_type - "contact" or "register"
  * @return JSON - success true with message or success false with conflated error message
  */
-   public function processContactSubmission($params) {
+   public function processSubmission($params, $submission_type) {
 
     $date = date_create();
     $params["timestamp"] = date_timestamp_get($date);
     $email = $params["email"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
-    $submitter = wire("pages")->get("template=$submitter_tmplt,{$prfx}_email=$email");
-    bd("template=$submitter_tmplt,{$prfx}_email=$email", "selector");
-    $submitter_exists = $submitter->id;
-    bd($submitter_exists, "submitter_exists");
-    if($submitter_exists){
+    $submitter_parent = "{$submission_type}s";
+    $parent_str = $this["paths"][$submitter_parent];
+    $submitter = wire("pages")->get("parent=$parent_str,{$prfx}_email=$email");
+    
+    if($submitter->id){
+
       $submission_parent = $submitter;
+      if($submission_type === "registration") return array("error"=>"A registration request for this email address is already being processed");
+    
     } else {
+
+      if($submission_type === "registration"){
+
+        // Check for existing account
+        $existing_user = wire("users")->get("email=$email")->id;
+        if($existing_user) return array("error"=>"An account already exists for this email address");
+      }
+
       $item_data = array(
         "title" => $this->getID(),
         "{$prfx}_email" => $email
       );
-      $submission_parent = wire("pages")->add($submitter_tmplt, $this["paths"]["contacts"], $item_data);
+      $submission_parent = wire("pages")->add($submitter_tmplt, $parent_str, $item_data);
     }
     $submissions_from_usr = $submission_parent->numChildren();
     $submissions_from_usr++;
