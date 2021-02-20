@@ -133,9 +133,9 @@ class ProcessContactPages extends Process {
             "ck_editor" => array("{$prfx}_document"), 
             "html_ee" => array("{$prfx}_submission"),
             "markup" => array("{$prfx}_markup"),
-            "version_controlled" => array("{$prfx}_markup", "{$prfx}_document")
+            "version_controlled" => array("{$prfx}_markup", "{$prfx}_document", "{$prfx}_status")
           ),
-          "vc_templates" => array("{$prfx}-form", "{$prfx}-document")
+          "vc_templates" => array("{$prfx}-form", "{$prfx}-document", "{$prfx}-message")
         );
 
         $this->initPages($pgs, $init_settings);
@@ -270,7 +270,8 @@ class ProcessContactPages extends Process {
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
       "{$prfx}_email" => $params["email"],
-      "{$prfx}_submission" => json_encode($params)
+      "{$prfx}_submission" => json_encode($params),
+      "{$prfx}_status" => "Pending"
     );
     $submission = wire("pages")->add($submitter_tmplt, $submission_parent->url, $item_data);
 
