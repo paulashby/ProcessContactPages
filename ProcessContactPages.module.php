@@ -29,6 +29,7 @@ class ProcessContactPages extends Process {
     $this->token_value = $this->session->CSRF->getTokenValue("pcp_token");
 
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
+    $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
   }
 /**
  * Store info for created elements and pass to completeInstall function
@@ -422,9 +423,85 @@ class ProcessContactPages extends Process {
     }
     return false;
   } 
+/**
+ * Adjust appearance of form field
+ *
+ * @param  HookEvent $event
+ */
+  public function customInputfieldFormRender($event) {
 
+    if($this->page->path === '/processwire/contact/'){
+
+      $return = $event->return;
+bd($return);
+      if (strpos($return, "active-form") !== false) {
+        $class_suffix = "--pending";
+      } else {
+        $class_suffix = "--processed";
+      }
+      
+       $class_suffix = "--pending";
+
+      // Add class suffix for css to remove top margin and set button colour according to status
+      $event->return = str_replace(
+        array("uk-margin-top", "ui-button ui-widget ui-state-default ui-corner-all"), 
+        array("", "ui-button ui-button$class_suffix ui-widget ui-state-default ui-corner-all"), $return);
+    }
+
+  }
   // Contact page
   public function ___execute() {
+    if($this->input->post->submit) {
+
+      // value of submit is the current status of the order
+      bd($this->input->post->submit, "post->submit");
+      bd($this->input->post->submission, "post->submission");
+
+/*
+
+      We deal with this action by updating the value of the status field as follows:
+
+      submit val            updated field value
+      -----------           --------------------
+      "Processed"           "Processed"
+      "Accepted"            "Accepted"
+                            Also, create user account for customer and email with password reset link
+
+                            ////////////////////////////////////////////////////////////////////////////////////
+                            // This is too involved and site-specific for our module! //////////////////////////
+
+                            //TODO: Set up password reset as detailed here:
+                            https://processwire.com/talk/topic/1716-integrating-a-member-visitor-login-form/
+                            So how do we initiate this process, given that the password reset system will differ
+                            from site to site?
+                            ////////////////////////////////////////////////////////////////////////////////////
+
+      We don't set the field value for the following:
+      "Rejected"            Send email to the rejected customer and remove their data
+      "Completed"           Remove data - should we warn?
+
+      */
+      // Update submission status
+      $form = $this->modules->get("InputfieldForm");
+      $form->processInput($this->input->post);
+
+      if($form->getErrors()) {
+        $out .= $form->render();
+      } else {
+        $prfx = $this["prfx"];
+        $operation = $this->sanitizer->text($this->input->post->submit);
+        
+        $submission = $this->sanitizer->text($this->input->post->submission);
+        $submission_page = wire("pages")->get("name=$submission");
+        $submission_page->setAndSave(["{$prfx}_status" => $operation]);
+
+        // $submission_page["{$prfx}_status"]->set("value", $operation);
+      }
+
+
+
+
+    }
     return $this->getTable("registrations");
   }
 /**
@@ -450,11 +527,19 @@ class ProcessContactPages extends Process {
     $header_row_settings = array();
 
     foreach ($submissions->children() as $submitter) {
-      
+
       foreach ($submitter->children() as $submission) {
+// bd($submission->name, "submission");
+        // Get associative array of submission data
         $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+        $status = $submission["{$prfx}_status"];
+
+        // Don't display "Accepted" or "Reminded" submissions as these are handled elsewhere
+        $approved = $status === "Accepted" || $status === "Reminded";
+        if($approved) continue;
 
         $record = array(
+          // Concatenate name fields
           "name" => $submission_data["fname"] . " " . $submission_data["lname"]
         ); 
         if(array_key_exists("timestamp", $submission_data)){
@@ -472,15 +557,16 @@ class ProcessContactPages extends Process {
           } 
         }
         ksort($record);
+        $record["status"] = $status;
         $header_row_settings = array_unique(array_merge($header_row_settings, array_keys($record)));
-        $records[] = $record;
+        $records[$submission->name] = $record;
       }
     }
     if(count($records)){
       ksort($header_row_settings);
       $table->headerRow($header_row_settings);
 
-      foreach ($this->getTableRows($records, $header_row_settings) as $row_out) {
+      foreach ($this->getTableRows($records, $header_row_settings, $submission_type) as $row_out) {
         $table->row($row_out);
       }
       $out = $table->render();
@@ -493,22 +579,105 @@ class ProcessContactPages extends Process {
  *
  * @param Array $records - contains arrays of user-submitted data as name value pairs ("email=>"paul@primitive.co" etc) 
  * @param Array $column_keys - list of column heading strings
+ * @param String $submission_type - Needed for call to getStatusForm
  * @return array of table rows
  */ 
-  protected function getTableRows($records, $column_keys) {
+  protected function getTableRows($records, $column_keys, $submission_type) {
 
     $table_rows = array();
 
-    foreach ($records as $record) {
+    foreach ($records as $page_name => $record) {
 
       $table_row = array();
 
       foreach ($column_keys as $record_item) {
-        // "Not provided" when $record_item not in record
-        $table_row[] = array_key_exists($record_item, $record) ? $record[$record_item] : "Not provided";
+
+        if($record_item === "status"){
+          $table_row[] = $this->getStatusForm($record[$record_item], $page_name, $submission_type);
+        } else {
+          // "Not provided" when $record_item not in record
+          $table_row[] = array_key_exists($record_item, $record) ? $record[$record_item] : "Not provided";
+        }
       }
       $table_rows[] = $table_row;
     }
+    // bd($table_rows, "table rows");
     return $table_rows;
+  }
+/**
+ * Assembles form with status button for Contact page listings
+ *
+ * @param String $status - "Pending", "Processed", "Completed", Accepted", "Reminded"
+ * @param String $page_name - Needed for execute when identifying target of $input->post operations
+ * @param String $submission_type - Needed to determine correct button value
+ * @return Form with appropriate button
+ */ 
+  protected function getStatusForm($status, $page_name, $submission_type){
+    bd($status, "status");
+    $form = $this->modules->get("InputfieldForm");
+    $form->action = "./";
+    $form->method = "post";
+
+    // Form/button only on live orders
+    // if($step !== 'completed') {
+
+    $form->attr("id+name","{$status}-form"); //Name differs from POP
+
+    $field = $this->modules->get("InputfieldHidden");
+    $field->attr("id+name", "submission"); // Name differs from POP
+
+    //TODO: We need the submission number - the title of the message page so we can perform status operations on correct items
+    //TODO: Change the colour of the status button in customInputfieldFormRender() - just got to work out the logic of checking for "active-form" on #437
+    $field->set("value", $page_name);
+    $form->add($field);
+
+    $button = $this->modules->get("InputfieldSubmit");
+
+    if($status === "Pending") {
+      // For both registration and regular forms, next step is the same
+      $button->value= "Processed";
+    } else {
+
+      if($submission_type === "registrations") {
+        // In this case we need both "Accepted" and "Rejected" buttons, one of which is clicked when assessment of prospective customercompleted
+        $button->value = "Rejected";
+        $accepted_button = $this->modules->get("InputfieldSubmit");
+        $accepted_button->value = "Accepted";
+        $form->add($accepted_button);
+      } else {
+        // Clicked when customer replies to our initial response
+        $button->value = "Completed";
+      }
+    }
+
+    $form->add($button);
+  // }
+    return $form->render();
+  }
+  //TODO: Update signature once fnc updated
+/**
+ * Move order to next step to reflect new status
+ *
+ * @param String $order_num
+ * @param String $order_step
+ * @return Boolean
+ */
+  public function progressOrder($order_num, $order_step) {
+
+    $settings = $this->modules->getConfig("ProcessOrderPages");
+    $prfx = $settings["prfx"];
+    $order_selector = "template={$prfx}-order,name={$order_num}";
+    $order_pg = $this->pages->findOne($order_selector);
+    
+    if($order_pg->id){
+      // Get the customer
+      $customer = $order_pg->children()->first()["{$prfx}_customer"];
+      $next_step = $this->getOrdersPage($order_step, $customer);
+      $order_pg->of(false);
+      $order_pg->parent = $next_step;
+      $order_pg->save();
+      return true;
+    }
+    return false;
   }
 }
