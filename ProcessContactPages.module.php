@@ -30,6 +30,15 @@ class ProcessContactPages extends Process {
 
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
+
+    // Associate file with profile template
+    if($this["prfx"]){
+      $prfx = $this["prfx"];
+      $profile_t = $this->templates->get("{$prfx}_profile");
+      if(! $profile_t) return;
+      $profile_t->filename = wire("config")->paths->root . 'site/modules/ProcessContactPages/profile.php';
+      $profile_t->save();
+    }
   }
 /**
  * Store info for created elements and pass to completeInstall function
@@ -82,6 +91,15 @@ class ProcessContactPages extends Process {
 
       $prfx = $data["prfx"];
 
+      // Make profile template for password resets
+      $profile_t = new Template();
+      $profile_t->name = "{$prfx}_profile";
+      $profile_t->fieldgroup = $this->templates->get("basic-page")->fieldgroup;
+      $profile_t->compile = 0;
+      $profile_t->noPrependTemplateFile = true;
+      $profile_t->noAppendTemplateFile = true; 
+      $profile_t->save();
+
       // Create array of required pages containing three associative arrays whose member keys are the names of the respective elements
       $pgs = array(
         "fields" => array(
@@ -89,6 +107,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup"),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeInteger", "label"=>"Contact reference number"),
+          "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission"),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
         ),
@@ -111,7 +130,9 @@ class ProcessContactPages extends Process {
           "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
-          "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"), 
+          "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"),
+          "tools" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Tools"),
+          "profile" => array("template" => "{$prfx}_profile", "parent"=>"{$contact_root_path}contact-pages/tools", "title"=>"Profile") 
         )
       );
 
@@ -153,11 +174,13 @@ class ProcessContactPages extends Process {
         // Store initial value of next_id for use when adding new users to the system (form submissions/registration requests)
         $data["next_id"] = "1";
 
-        // Add ref field to user template - this will be populated only for users added via registration form
+        // Add ref and tmp_pw fields to user template - these will be populated only for users added via registration form
         $usr_template = wire("templates")->get("user");
         $ufg = $usr_template->fieldgroup;
-        $f = wire("templates")->get("{$prfx}_ref");
-        $ufg->add($f);
+        $ref_f = wire("fields")->get("{$prfx}_ref");
+        $ufg->add($ref_f);
+        $temp_pw_f = wire("fields")->get("{$prfx}_tmp_pass");
+        $ufg->add($temp_pw_f);
         $ufg->save();
 
       } else {
@@ -232,7 +255,7 @@ class ProcessContactPages extends Process {
  * @return JSON - success true with message or success false with conflated error message
  */
    public function processSubmission($params, $submission_type) {
-
+bd(__LINE__);
     $date = date_create();
     $params["timestamp"] = date_timestamp_get($date);
     $email = $params["email"];
@@ -341,14 +364,47 @@ class ProcessContactPages extends Process {
 
     } else {
 
+      // Safe to proceed - remove ref and tmp_pw fields from user template
+      $prfx = $this["prfx"];
+      $this->removeFields(array("{$prfx}_ref", "{$prfx}_tmp_pass"));
+
       /*
-      Safe to proceed - remove the fields and templates of the contact system pages
+      Remove the fields and templates of the contact system pages
       $report_pg_errs false as pages as will already have been removed via the button on the Contact admin page
       */
       $page_maker->removeSet("contact_pages", false);
 
+      // Remove the ajax template that was installed by init()
+      $prfx = $this["prfx"];
+      $profile_t = $this->templates->get("{$prfx}_profile");
+      if($profile_t) {
+        wire('templates')->delete($profile_t);
+      }
+
       parent::uninstall();
     } 
+  }
+/**
+ * Remove field from system
+ *
+ * @param Array $f_names Names of fields to be removed
+ */
+  protected function removeFields($f_names){
+
+    // Traverse array of field names
+    foreach ($f_names as $f_name) {
+      $rm_fld = wire("fields")->get($f_name);
+      if($rm_fld !== null) {
+        $f_groups = $rm_fld->getFieldgroups();
+
+        // Remove from all fieldgroups
+        foreach ($f_groups as $fg) {
+          $fg->remove($rm_fld);
+          $fg->save();
+        }
+        wire("fields")->delete($rm_fld);
+      }
+    }
   }
 /**
  * Apply field and template settings
@@ -651,33 +707,41 @@ bd($return);
     }
 
     $form->add($button);
-  // }
+
     return $form->render();
   }
-  //TODO: Update signature once fnc updated
+  public function getPageTemplate(){
+    $tmplt = $this["hf_template"];
+    return wire("config")->paths->templates . $tmplt;
+  }
 /**
- * Move order to next step to reflect new status
+ * Login user - may have temporary password
  *
- * @param String $order_num
- * @param String $order_step
- * @return Boolean
+ * @param Page $user
+ * @return Logged in user or redirect to reset password
  */
-  public function progressOrder($order_num, $order_step) {
-
-    $settings = $this->modules->getConfig("ProcessOrderPages");
-    $prfx = $settings["prfx"];
-    $order_selector = "template={$prfx}-order,name={$order_num}";
-    $order_pg = $this->pages->findOne($order_selector);
-    
-    if($order_pg->id){
-      // Get the customer
-      $customer = $order_pg->children()->first()["{$prfx}_customer"];
-      $next_step = $this->getOrdersPage($order_step, $customer);
-      $order_pg->of(false);
-      $order_pg->parent = $next_step;
-      $order_pg->save();
-      return true;
+  public function login($user){
+    $prfx = $this["prfx"];
+    if($user->id && $user["{$prfx}_tmp_pass"] && $user["{$prfx}_tmp_pass"] === $pass) {
+      // user logging in with tmp_pass, so change it to be their real pass
+      $tmp_pass = true;
+      $user->of(false);
+      $user->pass = $user["{$prfx}_tmp_pass"];
+      $user->save();
+      $user->of(true);
     }
-    return false;
+    $user = $session->login($username, $pass); 
+    if($user) {
+      if($tmp_pass){
+        // user is logged in, get rid of tmp_pass
+        $user->of(false);
+        $user["{$prfx}_tmp_pass"] = "";
+        $user->save();
+        // Redirect to the profile edit page so password can be reset
+        $profile_page = wire("pages")->get("template={$prfx}_profile")->url;
+        $session->redirect($profile_page);        
+      } 
+      return $user;
+    }
   }
 }
