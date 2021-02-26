@@ -34,6 +34,14 @@ $config = array(
 		"value" => "1", 
 		"required" => false 
 	),
+	"contactRegRole" => array(
+		"name"=> "reg_roles",
+		"type" => "text", 
+		"label" => "Roles for automatically created accounts",
+		"description" => "Please provide a comma-separated list of role names or IDs.",  
+		"value" => "", 
+		"requiredif" => "autoreg=1"
+	),
 	"contactHeadFoot" => array(
 		"name"=> "hf_template",
 		"type" => "text", 
