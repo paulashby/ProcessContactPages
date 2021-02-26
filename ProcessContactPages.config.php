@@ -24,5 +24,23 @@ $config = array(
 		"description" => "Please provide a comma-separated list of role names or IDs.",  
 		"value" => "", 
 		"required" => false 
+	),
+	"contactAutoReg" => array(
+		"name"=> "autoreg",
+		"type" => "checkbox", 
+		"label" => "Automatically create accounts for approved registrations",
+		"description" => "Created accounts will be given temporary passwords requiring user reset",  
+		"notes" => "If this option is on, call ProcessContactPages->login(\$user) instead of \$session->login(\$user) when processing login form",
+		"value" => "1", 
+		"required" => false 
+	),
+	"contactHeadFoot" => array(
+		"name"=> "hf_template",
+		"type" => "text", 
+		"label" => "Name of page template containing only your standard site header and footer",
+		"description" => "Applies site styling to profile page used for password resets",  
+		"value" => "", 
+		"requiredif" => "autoreg=1",
+		"showIf" => "autoreg=1" 
 	)
 );
