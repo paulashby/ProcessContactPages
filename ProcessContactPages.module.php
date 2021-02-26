@@ -106,7 +106,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup"),
           "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup"),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
-          "{$prfx}_ref" => array("fieldtype"=>"FieldtypeInteger", "label"=>"Contact reference number"),
+          "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission"),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
@@ -132,7 +132,7 @@ class ProcessContactPages extends Process {
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"),
           "tools" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Tools"),
-          "profile" => array("template" => "{$prfx}_profile", "parent"=>"{$contact_root_path}contact-pages/tools", "title"=>"Profile") 
+          "profile" => array("template" => "{$prfx}_profile", "parent"=>"{$contact_root_path}", "title"=>"Profile") 
         )
       );
 
@@ -250,12 +250,12 @@ class ProcessContactPages extends Process {
 /**
  * Process form submission - create new entry in /contact-pages/active/contacts/submitter 
  *
- * @param Array $fparams - submitted with form - these MUST be pre-santized and validated
+ * @param Array $params - submitted with form - these MUST be pre-santized and validated
  * @param String $submission_type - "contact" or "register"
  * @return JSON - success true with message or success false with conflated error message
  */
    public function processSubmission($params, $submission_type) {
-bd(__LINE__);
+
     $date = date_create();
     $params["timestamp"] = date_timestamp_get($date);
     $email = $params["email"];
@@ -489,7 +489,7 @@ bd(__LINE__);
     if($this->page->path === '/processwire/contact/'){
 
       $return = $event->return;
-bd($return);
+
       if (strpos($return, "active-form") !== false) {
         $class_suffix = "--pending";
       } else {
@@ -509,34 +509,27 @@ bd($return);
   public function ___execute() {
     if($this->input->post->submit) {
 
-      // value of submit is the current status of the order
+      // Value of submit is the current status of the order
       bd($this->input->post->submit, "post->submit");
+
+      // Value of submission is the title of the submission page
       bd($this->input->post->submission, "post->submission");
 
-/*
+    /*
+     * We deal with this action by updating the value of the status field as follows:
+     * 
+     * submit val            updated field value
+     * -----------           --------------------
+     * "Processed"           "Processed"
+     * "Accepted"            "Accepted"
+     *                       Create user account for customer and email with password reset link
+     * 
+     *  We don't set the field value for the following:
+     * "Rejected"            Send email to the rejected customer and remove their data
+     * "Completed"           Remove data - should we warn?
+     * 
+     */
 
-      We deal with this action by updating the value of the status field as follows:
-
-      submit val            updated field value
-      -----------           --------------------
-      "Processed"           "Processed"
-      "Accepted"            "Accepted"
-                            Also, create user account for customer and email with password reset link
-
-                            ////////////////////////////////////////////////////////////////////////////////////
-                            // This is too involved and site-specific for our module! //////////////////////////
-
-                            //TODO: Set up password reset as detailed here:
-                            https://processwire.com/talk/topic/1716-integrating-a-member-visitor-login-form/
-                            So how do we initiate this process, given that the password reset system will differ
-                            from site to site?
-                            ////////////////////////////////////////////////////////////////////////////////////
-
-      We don't set the field value for the following:
-      "Rejected"            Send email to the rejected customer and remove their data
-      "Completed"           Remove data - should we warn?
-
-      */
       // Update submission status
       $form = $this->modules->get("InputfieldForm");
       $form->processInput($this->input->post);
@@ -546,17 +539,29 @@ bd($return);
       } else {
         $prfx = $this["prfx"];
         $operation = $this->sanitizer->text($this->input->post->submit);
-        
         $submission = $this->sanitizer->text($this->input->post->submission);
         $submission_page = wire("pages")->get("name=$submission");
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
-        // $submission_page["{$prfx}_status"]->set("value", $operation);
+        switch ($operation) {
+          case 'Accepted':
+            bd("Accepted - create user account, send pw reset email");
+            $this->createUserAccount($submission_page);
+            break;
+
+          case 'Rejected':
+            bd("Rejected - send email to customer and delete data");
+            break;
+
+          case 'Completed':
+            bd("Completed - remove data from Contacts section - could display notice");
+            break;
+          
+          default:
+            // Do nothing
+            break;
+        }
       }
-
-
-
-
     }
     return $this->getTable("registrations");
   }
@@ -585,7 +590,7 @@ bd($return);
     foreach ($submissions->children() as $submitter) {
 
       foreach ($submitter->children() as $submission) {
-// bd($submission->name, "submission");
+
         // Get associative array of submission data
         $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
         $status = $submission["{$prfx}_status"];
@@ -652,7 +657,7 @@ bd($return);
           $table_row[] = $this->getStatusForm($record[$record_item], $page_name, $submission_type);
         } else {
           // "Not provided" when $record_item not in record
-          $table_row[] = array_key_exists($record_item, $record) ? $record[$record_item] : "Not provided";
+          $table_row[] = array_key_exists($record_item, $record) ? wire("sanitizer")->entities($record[$record_item]) : "Not provided";
         }
       }
       $table_rows[] = $table_row;
@@ -669,20 +674,16 @@ bd($return);
  * @return Form with appropriate button
  */ 
   protected function getStatusForm($status, $page_name, $submission_type){
-    bd($status, "status");
+
     $form = $this->modules->get("InputfieldForm");
     $form->action = "./";
     $form->method = "post";
-
-    // Form/button only on live orders
-    // if($step !== 'completed') {
 
     $form->attr("id+name","{$status}-form"); //Name differs from POP
 
     $field = $this->modules->get("InputfieldHidden");
     $field->attr("id+name", "submission"); // Name differs from POP
 
-    //TODO: We need the submission number - the title of the message page so we can perform status operations on correct items
     //TODO: Change the colour of the status button in customInputfieldFormRender() - just got to work out the logic of checking for "active-form" on #437
     $field->set("value", $page_name);
     $form->add($field);
@@ -710,19 +711,74 @@ bd($return);
 
     return $form->render();
   }
+/**
+ * get header/footer template set by user in module configuration
+ *
+ * @return String - path to template
+ */
   public function getPageTemplate(){
     $tmplt = $this["hf_template"];
     return wire("config")->paths->templates . $tmplt;
   }
 /**
+ * Create new user for approved account registration request
+ *
+ * @param String $submission - title of submission page
+ * @return User
+ */
+  protected function createUserAccount($submission){
+    $prfx = $this["prfx"];
+    $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+    $email = $submission_data["email"];
+
+    if($email) {
+      // We don't have such a user yet
+      $u = wire("users")->get("email=$email");
+      if($u->id) throw new WireException($e . "An account exists for this email address.");
+
+      $un = $submission_data["username"];
+      $u = wire("users")->get("name=$un");
+      if($u->id) throw new WireException($e . "An account exists for this user name.");
+
+      // Make new user
+      $u = wire("users")->add($un);
+      $u_roles = explode(",", $this["reg_roles"]);
+      foreach ($u_roles as $u_role){
+        $u->of(false);
+        $u->addRole($u_role);
+        $u->save();
+      }
+      // generate a random, temporary password - see https://processwire.com/talk/topic/1716-integrating-a-member-visitor-login-form/
+      $pass = '';
+      $chars = 'abcdefghjkmnopqrstuvwxyz23456789!@£$%^&*'; 
+      $length = mt_rand(9,12); // password between 9 and 12 characters
+      for($n = 0; $n < $length; $n++) $pass .= $chars[mt_rand(0, strlen($chars)-1)];
+      $u->of(false);
+      $u["email"] = $email;
+      $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
+      $u["{$prfx}_ref"] = $submission->parent->title;
+      $u->save();
+      $u->of(true); 
+      $message = "Your registration request was successful and your temporary password on our web site is: $pass\n";
+      $message .= "Please change it after you login.";
+      $http_host = wire("config")->httpHost;
+      mail($u->email, "Password reset", $message, "From: noreply@$http_host"); 
+    }
+  }
+/**
  * Login user - may have temporary password
  *
  * @param Page $user
+ * @param String $username
+ * @param String $pass
  * @return Logged in user or redirect to reset password
  */
-  public function login($user){
+  public function login($user, $username, $pass){
+    
     $prfx = $this["prfx"];
+
     if($user->id && $user["{$prfx}_tmp_pass"] && $user["{$prfx}_tmp_pass"] === $pass) {
+     
       // user logging in with tmp_pass, so change it to be their real pass
       $tmp_pass = true;
       $user->of(false);
@@ -730,7 +786,8 @@ bd($return);
       $user->save();
       $user->of(true);
     }
-    $user = $session->login($username, $pass); 
+    $user = wire("session")->login($username, $pass); 
+    
     if($user) {
       if($tmp_pass){
         // user is logged in, get rid of tmp_pass
@@ -739,7 +796,7 @@ bd($return);
         $user->save();
         // Redirect to the profile edit page so password can be reset
         $profile_page = wire("pages")->get("template={$prfx}_profile")->url;
-        $session->redirect($profile_page);        
+        wire("session")->redirect($profile_page);        
       } 
       return $user;
     }
