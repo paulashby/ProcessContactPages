@@ -565,7 +565,7 @@ class ProcessContactPages extends Process {
             break;
 
           case 'Rejected':
-            bd("Rejected - send email to customer and delete data");
+            $this->rejectRegistration($submission_page);
             break;
 
           case 'Completed':
@@ -580,7 +580,33 @@ class ProcessContactPages extends Process {
     }
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
+    $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
     return $out;
+  }
+  public function ___executeConfirm() {
+
+    // Double check it's OK to delete order data
+    return "<h4>WARNING: This will remove the entire contact system. Are you sure you want to delete your contact data?</h4>
+      <a href='./' class='ui-button ui-button--cancel ui-button--pop ui-button--cancel ui-state-default'>Cancel</a>
+      <a href='./deletecontacts' class='ui-button ui-button--nuclear ui-state-default'>Yes, get on with it!</a>";
+  }
+  public function ___executeDeleteContacts() {
+
+    // Delete contact data
+    $contact_root = wire("pages")->get("contact-pages");
+
+    if($contact_root->id) {
+
+      $contact_root->delete(true);
+      return "<h3>Contact data successfully removed</h3>
+      <p>You can now uninstall the " . $this->className . " module</p>";
+
+    } else {
+
+      return "<h3>Something went wrong</h3>
+      <p>The contact page could not be found</p>";
+
+    }
   }
 /**
  * Make a table showing orders for the provided steps
@@ -763,7 +789,33 @@ protected function getTableRows($records, $column_keys, $submission_type){
 /**
  * Create new user for approved registration request
  *
- * @param String $submission - title of submission page
+ * @param Page $submission - the submission page
+ * @return User
+ */
+  protected function rejectRegistration($submission){
+    
+    $prfx = $this["prfx"];
+    $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+    $email = $submission_data["email"];
+
+    $message = "This is a message from Paper Bird to inform you that we are unable to provide you with a user account at this time";
+    $message .= "\nBest regards,\nThe Paper Bird team.";
+    //TODO: Add these settings to the config?
+    //TODO: Add an image to signature
+    $signature = "\n\nPaper Bird Publishing\n020 8613 8085\n07766 164 807\nwww.paperbirdpublishing.co.uk";
+    $message .= $signature;
+
+    $http_host = wire("config")->httpHost;
+    mail($email, "Paper Bird Registration Request", $message, "From: noreply@$http_host"); 
+
+    $submission_parent = $submission->parent;
+    wire("pages")->delete($submission_parent, true); // Delete submission and its parent
+    wire("notices")->message("A rejection message has been sent to the email provided");
+  }
+/**
+ * Create new user for approved registration request
+ *
+ * @param Page $submission - the submission page
  * @return User
  */
   protected function createUserAccount($submission){
@@ -794,6 +846,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $chars = 'abcdefghjkmnopqrstuvwxyz23456789!@£$%^&*'; 
       $length = mt_rand(9,12); // password between 9 and 12 characters
       for($n = 0; $n < $length; $n++) $pass .= $chars[mt_rand(0, strlen($chars)-1)];
+        bd($pass, "password");
       $u->of(false);
       $u["email"] = $email;
       $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
@@ -808,6 +861,8 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $message .= $signature;
       $http_host = wire("config")->httpHost;
       mail($u->email, "Password reset", $message, "From: noreply@$http_host"); 
+
+      return wire("notices")->message("Customer account successfully created");
     }
   }
 /**
