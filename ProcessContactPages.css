@@ -1,34 +1,27 @@
 .ui-button.ui-button--processed {
 	background-color: #ca5e5e; /* Red */
 }
-.ui-button.ui-button--processed:hover {
-	background-color: #e83561; /* Bright red */
-}
-
-.ui-button.ui-button--pending, .ui-button.ui-button--accepted {
+.ui-button.ui-button--pending, .ui-button.ui-button--accepted, .ui-button.ui-button--completed {
 	background-color: #3eb998; /* Green */
 }
-.ui-button.ui-button--pending:hover, .ui-button.ui-button--accepted:hover {
-	background-color: #15d7a3; /* Bright green*/
+.ui-button.ui-button--remove {
+	background-color: #6d7a8a; /* Grey */
+}
+.ui-button.ui-button--nuclear {
+	background-color: #3eb998; /* Green */
+}
+.ui-button.ui-button--cancel {
+	background-color: #1c2836; /* Black */
+}
+
+.ui-button.ui-button--processed:hover, .ui-button.ui-button--nope:hover, .ui-button.ui-button--pending:hover, .ui-button.ui-button--accepted:hover, .ui-button.ui-button--completed:hover, .ui-button.ui-button--remove:hover, .ui-button.ui-button--nuclear:hover, .ui-button.ui-button--cancel:hover  {
+	background-color: #e83561; /* Bright red */
 }
 
 .ui-button.ui-button--rejected {
 	margin-top: 0.5rem;
 }
-.uk-form--processed.uk-grid .Inputfield_submit{
-
-}
 .uk-form--processed .uk-grid, .uk-form--processed .uk-grid .Inputfield_submit{
 	display: block;
 }
 
-
-/*
-
-.ui-button.ui-button--remove:hover,
-.ui-button.ui-button--processed:hover,
-.ui-button.ui-button--pending:hover,
-.ui-button--pop.ui-button--cancel:hover
-
-
-*/
