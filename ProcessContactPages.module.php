@@ -319,12 +319,13 @@ class ProcessContactPages extends Process {
 
     $title_sffx = "-$submissions_from_usr";
     $submitter_tmplt = "{$prfx}-message";
+    $submission_status = $submission_type === "contact" ? "Pending" : "Processed";
     
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
       "{$prfx}_email" => $params["email"],
       "{$prfx}_submission" => json_encode($params),
-      "{$prfx}_status" => "Pending"
+      "{$prfx}_status" => $submission_status
     );
     $submission = wire("pages")->add($submitter_tmplt, $submission_parent->url, $item_data);
 
@@ -641,29 +642,14 @@ class ProcessContactPages extends Process {
 
       $table_rows = $this->getTableRows($records, $header_row_settings, $submission_type);
 
-      $Ongoing = $table_rows["ongoing"]; // These are Contact submissions or Registration requests that haven't yet reached the approval stage
-
-      foreach ($Ongoing as $row_out) {
+      foreach ($table_rows as $row_out) {
         $table->row($row_out);
       }
+      $table_title = $submission_type === "contacts" ? "Contact form submissions" : ucfirst($submission_type);
       // $table_rows
-      $out = "<h2>Ongoing $submission_type</h2>";
+      $out = "<h2>$table_title</h2>";
       $out .= $table->render();
 
-      if(array_key_exists("approvals", $table_rows)){
-        $out .= "<h2>" . ucfirst($submission_type) . " for approval</h2>";
-
-        $table = $this->modules->get("MarkupAdminDataTable");
-        $table->setEncodeEntities(false); // Parse form HTML
-        $table->addClass("pw-table--approvals");
-        // $table->headerRow(array("date", "email", "message", "name", "username", "status"));
-        $table->headerRow($header_row_settings);
-
-        foreach ($table_rows["approvals"] as $row_out) {
-          $table->row($row_out);
-        }
-        $out .= $table->render();
-      }
       return $out;
     }
     return "No pending $submission_type";
@@ -674,26 +660,16 @@ class ProcessContactPages extends Process {
  * @param Array $records - contains arrays of user-submitted data as name value pairs ("email=>"paul@primitive.co" etc) 
  * @param Array $column_keys - list of column heading strings
  * @param String $submission_type - Needed for call to getStatusForm
- * @return Array containing arrays of table rows - "ongoing" for regular entries and "approvals" for submissions with "Accepted" and "Rejected" buttons (these tables have fewer columns to allow for width of buttons)
+ * @return Array of table rows
  */
 protected function getTableRows($records, $column_keys, $submission_type){
 
-    $table_rows = array(
-      "ongoing" => array()
-    );
+    $table_rows = array();
 
     foreach ($records as $page_name => $record) {
 
       $button_value = $this->getButtonValue($record["status"], $submission_type);
-
-      if($button_value === "Accepted"){
-        // For "approvals" table
-        // $table_rows["approvals"][] = $this->getTableRow(array("date", "email", "message", "name", "username", "status"), $page_name, $record, "Rejected");
-        $table_rows["approvals"][] = $this->getTableRow($column_keys, $page_name, $record, "Rejected");
-      } else {
-        // For "ongoing" table
-        $table_rows["ongoing"][] = $this->getTableRow($column_keys, $page_name, $record, $button_value);
-      }
+      $table_rows[] = $this->getTableRow($column_keys, $page_name, $record, $button_value);
     }    
     return $table_rows;
   } 
@@ -707,7 +683,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
   protected function getButtonValue($status, $submission_type){
 
     if($status === "Pending") return "Processed";
-    if($submission_type === "registrations") return "Accepted";
+    if($submission_type === "registrations") return "Rejected";
     return "Completed";
   }
 /**
