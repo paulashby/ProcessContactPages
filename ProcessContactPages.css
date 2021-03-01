@@ -1,0 +1,34 @@
+.ui-button.ui-button--processed {
+	background-color: #ca5e5e; /* Red */
+}
+.ui-button.ui-button--processed:hover {
+	background-color: #e83561; /* Bright red */
+}
+
+.ui-button.ui-button--pending, .ui-button.ui-button--accepted {
+	background-color: #3eb998; /* Green */
+}
+.ui-button.ui-button--pending:hover, .ui-button.ui-button--accepted:hover {
+	background-color: #15d7a3; /* Bright green*/
+}
+
+.ui-button.ui-button--rejected {
+	margin-top: 0.5rem;
+}
+.uk-form--processed.uk-grid .Inputfield_submit{
+
+}
+.uk-form--processed .uk-grid, .uk-form--processed .uk-grid .Inputfield_submit{
+	display: block;
+}
+
+
+/*
+
+.ui-button.ui-button--remove:hover,
+.ui-button.ui-button--processed:hover,
+.ui-button.ui-button--pending:hover,
+.ui-button--pop.ui-button--cancel:hover
+
+
+*/

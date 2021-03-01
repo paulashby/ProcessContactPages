@@ -214,7 +214,36 @@ class ProcessContactPages extends Process {
       throw new WireException("$doc_title contains no data");
     }
     throw new WireException("$doc_title does not exist"); 
-  }    
+  }  
+/**
+ * Generate HTML markup for multiple consecutive forms
+ *
+ * @param Array $options - contains options array for each required form [ "title"=>String, "form"=>String, "handler"=>String]
+ * @return String HTML markup
+ */
+  public function renderForms($options){
+
+    $handlers = array();
+    $forms_out = "";
+
+    foreach ($options as $form_options) {
+      if($form_options["handler"] && ! in_array($form_options["handler"], $handlers)){
+        $handlers[] = $form_options["handler"];
+      
+      }
+      $title = $form_options["title"];
+      $forms_out .= "<h2>$title</h2>";
+      $forms_out .= $this->renderForm($form_options["form"]);
+    }
+    $out = "<div class='pcp_forms'>";
+
+    foreach ($handlers as $handler_url) {
+      $out .= "<script src='$handler_url'></script>";
+    }
+    $out .= $forms_out;
+    $out .= "</div><!-- End pcp_forms -->";
+    return $out;
+  }  
 /**
  * Generate HTML markup for given form
  *
@@ -222,11 +251,11 @@ class ProcessContactPages extends Process {
  * @param String $handler_url - path to js file to handle form submission
  * @return String HTML markup
  */
-  public function renderForm($form_title, $handler_url) {
+  public function renderForm($form_title, $handler_url = false) {
 
     if($this->privacyPolicyExists()){
       $prfx = $this["prfx"];
-      $open = "<script src='$handler_url'></script><div class='contact'>";
+      $open = $handler_url ? "<script src='$handler_url'></script><div class='pcp_form'>" : "<div class='pcp_form'>";
       $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
       $token_name = $this->token_name;
@@ -352,8 +381,7 @@ class ProcessContactPages extends Process {
 
     $page_maker = $this->modules->get("PageMaker");
     $page_maker_config = $this->modules->getConfig("PageMaker"); 
-    $contact_system_pages = $page_maker_config["page_sets"]["contact_pages"]["setup"]["pages"];
-
+    
     // Check for active contacts before uninstalling
     if($this->inUse($this["contact_parents"])) { 
       
@@ -490,30 +518,17 @@ class ProcessContactPages extends Process {
 
       $return = $event->return;
 
-      if (strpos($return, "active-form") !== false) {
-        $class_suffix = "--pending";
-      } else {
-        $class_suffix = "--processed";
-      }
-      
-       $class_suffix = "--pending";
-
-      // Add class suffix for css to remove top margin and set button colour according to status
       $event->return = str_replace(
         array("uk-margin-top", "ui-button ui-widget ui-state-default ui-corner-all"), 
-        array("", "ui-button ui-button$class_suffix ui-widget ui-state-default ui-corner-all"), $return);
+        array("", "ui-button ui-widget ui-state-default ui-corner-all"), 
+        $return);
     }
 
   }
   // Contact page
   public function ___execute() {
+
     if($this->input->post->submit) {
-
-      // Value of submit is the current status of the order
-      bd($this->input->post->submit, "post->submit");
-
-      // Value of submission is the title of the submission page
-      bd($this->input->post->submission, "post->submission");
 
     /*
      * We deal with this action by updating the value of the status field as follows:
@@ -538,14 +553,13 @@ class ProcessContactPages extends Process {
         $out .= $form->render();
       } else {
         $prfx = $this["prfx"];
-        $operation = $this->sanitizer->text($this->input->post->submit);
-        $submission = $this->sanitizer->text($this->input->post->submission);
+        $operation = $this->sanitizer->text($this->input->post->submit); // Current status of the submission
+        $submission = $this->sanitizer->text($this->input->post->submission); // Title of the submission page
         $submission_page = wire("pages")->get("name=$submission");
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
         switch ($operation) {
           case 'Accepted':
-            bd("Accepted - create user account, send pw reset email");
             $this->createUserAccount($submission_page);
             break;
 
@@ -579,8 +593,6 @@ class ProcessContactPages extends Process {
     $table->setEncodeEntities(false); // Parse form HTML
 
     $prfx = $this["prfx"];
-    $submitter_tmplt = "{$prfx}-submitter";
-    $submitter_parent = $submission_type;
     $parent_str = $this["paths"][$submission_type];
     $submissions = wire("pages")->get($parent_str); // This is the Contacts or Registrations page - children should be the pages with email field
     
@@ -607,7 +619,6 @@ class ProcessContactPages extends Process {
         if(array_key_exists("timestamp", $submission_data)){
           
           // Convert timestamp to formatted string
-          $date = date_create();
           $submission_data["date"] = date('Y-m-d', $submission_data["timestamp"]);
         }
         foreach ($submission_data as $key => $value) {
@@ -644,7 +655,9 @@ class ProcessContactPages extends Process {
 
         $table = $this->modules->get("MarkupAdminDataTable");
         $table->setEncodeEntities(false); // Parse form HTML
-        $table->headerRow(array("date", "email", "message", "name", "username", "status"));
+        $table->addClass("pw-table--approvals");
+        // $table->headerRow(array("date", "email", "message", "name", "username", "status"));
+        $table->headerRow($header_row_settings);
 
         foreach ($table_rows["approvals"] as $row_out) {
           $table->row($row_out);
@@ -675,7 +688,8 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
       if($button_value === "Accepted"){
         // For "approvals" table
-        $table_rows["approvals"][] = $this->getTableRow(array("date", "email", "message", "name", "username", "status"), $page_name, $record, "Rejected");
+        // $table_rows["approvals"][] = $this->getTableRow(array("date", "email", "message", "name", "username", "status"), $page_name, $record, "Rejected");
+        $table_rows["approvals"][] = $this->getTableRow($column_keys, $page_name, $record, "Rejected");
       } else {
         // For "ongoing" table
         $table_rows["ongoing"][] = $this->getTableRow($column_keys, $page_name, $record, $button_value);
@@ -734,10 +748,12 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $form->action = "./";
     $form->method = "post";
 
-    $form->attr("id+name","{$status}-form"); //Name differs from POP
-
     $field = $this->modules->get("InputfieldHidden");
-    $field->attr("id+name", "submission"); // Name differs from POP
+    $field->attr("name", "submission");
+    
+    $status_string = strtolower($status);
+    // $form->class .= " form--$status_string";
+    $form->addClass("uk-form--$status_string");
 
     //TODO: Change the colour of the status button in customInputfieldFormRender() - just got to work out the logic of checking for "active-form" on #437
     $field->set("value", $page_name);
@@ -745,10 +761,14 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     $button = $this->modules->get("InputfieldSubmit");
     $button->value = $button_value;
-    
+    $button->addClass("ui-button--$status_string");
+
     if($button_value === "Rejected"){
+      
+      $button->addClass("ui-button--rejected"); 
       $accepted_button = $this->modules->get("InputfieldSubmit");
       $accepted_button->value = "Accepted";
+      $accepted_button->addClass("ui-button--accepted"); 
       $form->add($accepted_button); 
     }
     $form->add($button);
@@ -765,12 +785,13 @@ protected function getTableRows($records, $column_keys, $submission_type){
     return wire("config")->paths->templates . $tmplt;
   }
 /**
- * Create new user for approved account registration request
+ * Create new user for approved registration request
  *
  * @param String $submission - title of submission page
  * @return User
  */
   protected function createUserAccount($submission){
+    
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
     $email = $submission_data["email"];
@@ -803,8 +824,12 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $u["{$prfx}_ref"] = $submission->parent->title;
       $u->save();
       $u->of(true); 
-      $message = "Your registration request was successful and your temporary password on our web site is: $pass\n";
+      $message = "Your registration request was successful and your temporary password on the Paper Bird site is: $pass\n";
       $message .= "Please change it after you login.";
+      //TODO: Add these settings to the config?
+      //TODO: Add an image to signature
+      $signature = "\n\nPaper Bird Publishing\n020 8613 8085\n07766 164 807\nwww.paperbirdpublishing.co.uk";
+      $message .= $signature;
       $http_host = wire("config")->httpHost;
       mail($u->email, "Password reset", $message, "From: noreply@$http_host"); 
     }
