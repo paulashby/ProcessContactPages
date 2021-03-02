@@ -5,7 +5,7 @@ $config = array(
 	"contactRootlocation" => array(
 	    "name" => "contact_root_location",
 	    "type" => "PageListSelect",
-	    "label" => "Where to install the contact system (can't be reset after installation)",
+	    "label" => "Where to install the contact system (can't be reset once submitted)",
 	    "description" => "Please select a page for order storage - if no page is selected, the orders will be stored at '/contact/'", 
 	    "required" => false
 	),
