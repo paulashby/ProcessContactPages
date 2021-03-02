@@ -79,12 +79,16 @@ class ProcessContactPages extends Process {
       // Installing - fine to update config
 
       $data["configured"] = true; // Set flag
+
+      // Where to install module pages
       $contact_root_id = $data["contact_root_location"];
       $contact_root = $this->pages->get($contact_root_id);
 
       if($contact_root->id) {
         $contact_root_path = $contact_root->path();
       } else {
+        // Install in root if not provided
+        //TODO: Might be better to abort if root not provided - that  way, won't auto install anything until properly configured - so we need to remove the configured flag here and return if root hasn't been provided
         $contact_root_path = "/";
         $contact_root = $this->pages->get("/");
       }
@@ -150,6 +154,7 @@ class ProcessContactPages extends Process {
 
       if($made_pages === true) {
 
+        // Additional settings for fields and templates
         $init_settings = array(
           "fields" => array(
             "ck_editor" => array("{$prfx}_document"), 
@@ -159,8 +164,10 @@ class ProcessContactPages extends Process {
           ),
           "vc_templates" => array("{$prfx}-form", "{$prfx}-document", "{$prfx}-message")
         );
-
+        // Apply additional settings to fields and templates
         $this->initPages($pgs, $init_settings);
+
+        // Store paths to top level pages
         $data["paths"] = array(
           "forms" => $contact_root_path . "contact-pages/settings/forms",
           "documents" => $contact_root_path . "contact-pages/settings/documents",
@@ -168,13 +175,11 @@ class ProcessContactPages extends Process {
           "registrations" => $contact_root_path . "contact-pages/active/registrations"
         );
 
-        // Store titles of parent pages of live contact data pages
-        $data["contact_parents"] = array("forms", "documents", "contacts", "registrations");
-
         // Store initial value of next_id for use when adding new users to the system (form submissions/registration requests)
         $data["next_id"] = "1";
 
-        // Add ref and tmp_pw fields to user template - these will be populated only for users added via registration form
+        // Add ref (which will be associated with records of data deletion) and tmp_pw (temporary password used for initial pw reset) fields to user template - these will be populated only for users added via registration form
+        //TODO: Does ref field belong in this module, or should it be part of the GDPR module?
         $usr_template = wire("templates")->get("user");
         $ufg = $usr_template->fieldgroup;
         $ref_f = wire("fields")->get("{$prfx}_ref");
@@ -218,7 +223,7 @@ class ProcessContactPages extends Process {
 /**
  * Generate HTML markup for multiple consecutive forms
  *
- * @param Array $options - contains options array for each required form [ "title"=>String, "form"=>String, "handler"=>String]
+ * @param Array $options - contains options array for each required form [ "title"=>String (title to use when outputting form), "form"=>String (title of page with form markup field), "handler"=>String (path to js file)]
  * @return String HTML markup
  */
   public function renderForms($options){
@@ -227,6 +232,7 @@ class ProcessContactPages extends Process {
     $forms_out = "";
 
     foreach ($options as $form_options) {
+      // Add paths to javascript form hanlders if not already in $handlers array
       if($form_options["handler"] && ! in_array($form_options["handler"], $handlers)){
         $handlers[] = $form_options["handler"];
       
@@ -253,17 +259,23 @@ class ProcessContactPages extends Process {
  */
   public function renderForm($form_title, $handler_url = false) {
 
+    // Don't want to present a form to user if privacy policy has not been populated
     if($this->privacyPolicyExists()){
       $prfx = $this["prfx"];
+
+      // Include script tag for handler if provided
       $open = $handler_url ? "<script src='$handler_url'></script><div class='pcp_form'>" : "<div class='pcp_form'>";
       $close = "<p class='form__error form__error--submission'>No Error</p></div>";
 
+      // Include token to mitigate CSRF
       $token_name = $this->token_name;
       $token_value = $this->token_value;
 
+      // Get page with form markup
       $form_page = wire("pages")->get("template={$prfx}-form, title=$form_title");
       $markup = $form_page["{$prfx}_markup"];
 
+      // Array keys correspond to placeholder text in form markup. Value is the replacement string.
       $placeholders = array(
         "csrf-token-placeholder" => "<input type='hidden' id='submission_token' name='$token_name' value='$token_value'>"
       );
@@ -312,18 +324,25 @@ class ProcessContactPages extends Process {
         "title" => $this->getID(),
         "{$prfx}_email" => $email
       );
+      // Make parent page for submissions form this email address
       $submission_parent = wire("pages")->add($submitter_tmplt, $parent_str, $item_data);
     }
+    // Use number of current submissions from this email address to get numerical suffix
     $submissions_from_usr = $submission_parent->numChildren();
     $submissions_from_usr++;
 
     $title_sffx = "-$submissions_from_usr";
     $submitter_tmplt = "{$prfx}-message";
+
+    /*
+     * Registrations go straight to "Processed". So they show "Accepted"/"Rejected" buttons instead of a "Processed" button like Contacts.
+     * This is because it turns out that 'backgound checks' for regsitrations only take a few mins, so the "Pending" to "Processed" stage is overkill
+     */
     $submission_status = $submission_type === "contact" ? "Pending" : "Processed";
     
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
-      "{$prfx}_email" => $params["email"],
+      "{$prfx}_email" => $params["email"], //TODO: Is email required here? It's already on parent page!
       "{$prfx}_submission" => json_encode($params),
       "{$prfx}_status" => $submission_status
     );
@@ -384,7 +403,7 @@ class ProcessContactPages extends Process {
     $page_maker_config = $this->modules->getConfig("PageMaker"); 
     
     // Check for active contacts before uninstalling
-    if($this->inUse($this["contact_parents"])) { 
+    if($this->inUse(array_keys($this["paths"]))){
       
       // There are active contacts - abort uninstall
       $this->error("The module could not be uninstalled as live data exists. If you want to proceed, you can remove all order data from the Admin/Contact page and try again.");
@@ -395,6 +414,7 @@ class ProcessContactPages extends Process {
 
       // Safe to proceed - remove ref and tmp_pw fields from user template
       $prfx = $this["prfx"];
+      //TODO: Are we having ref field in this module?
       $this->removeFields(array("{$prfx}_ref", "{$prfx}_tmp_pass"));
 
       /*
@@ -449,18 +469,25 @@ class ProcessContactPages extends Process {
       $f = wire("fields")->get($field);
 
       if(in_array($field, $init_settings["fields"]["ck_editor"])){
+
+        // Set Inputfield Type to CKEditor
         $f->set('inputfieldClass', 'InputfieldCKEditor');
         $f->save();
       }
       if(in_array($field, $init_settings["fields"]["html_ee"])){
+
+        // Set Text Formatter to HTML Entity Encoder
         $f->set("textformatters", array("TextformatterEntities"));
         $f->save();
       }      
       if(in_array($field, $init_settings["fields"]["markup"])){
+
+        // Set Content Type to Markup/HTML
         $f->set("contentType", 1);
         $f->save();
       }
       if(in_array($field, $init_settings["fields"]["version_controlled"])){
+
         // Activate version control
         $vc_data["enabled_fields"][] = $f->id;
       }
@@ -509,7 +536,7 @@ class ProcessContactPages extends Process {
     return false;
   } 
 /**
- * Adjust appearance of form field
+ * Remove top margin from button
  *
  * @param  HookEvent $event
  */
@@ -531,22 +558,8 @@ class ProcessContactPages extends Process {
 
     if($this->input->post->submit) {
 
-    /*
-     * We deal with this action by updating the value of the status field as follows:
-     * 
-     * submit val            updated field value
-     * -----------           --------------------
-     * "Processed"           "Processed"
-     * "Accepted"            "Accepted"
-     *                       Create user account for customer and email with password reset link
-     * 
-     *  We don't set the field value for the following:
-     * "Rejected"            Send email to the rejected customer and remove their data
-     * "Completed"           Remove data - should we warn?
-     * 
-     */
+      // Process button clicks
 
-      // Update submission status
       $form = $this->modules->get("InputfieldForm");
       $form->processInput($this->input->post);
 
@@ -556,6 +569,8 @@ class ProcessContactPages extends Process {
         $prfx = $this["prfx"];
         $operation = $this->sanitizer->text($this->input->post->submit); // Current status of the submission
         $submission = $this->sanitizer->text($this->input->post->submission); // Title of the submission page
+
+        // Update submission status
         $submission_page = wire("pages")->get("name=$submission");
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
@@ -569,6 +584,7 @@ class ProcessContactPages extends Process {
             break;
 
           case 'Completed':
+            //TODO: Implement this
             bd("Completed - remove data from Contacts section - could display notice");
             break;
           
@@ -578,8 +594,11 @@ class ProcessContactPages extends Process {
         }
       }
     }
+    // Display Contact and Regsitration tables
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
+
+    // Add data removal button
     $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
     return $out;
   }
@@ -621,7 +640,7 @@ class ProcessContactPages extends Process {
 
     $prfx = $this["prfx"];
     $parent_str = $this["paths"][$submission_type];
-    $submissions = wire("pages")->get($parent_str); // This is the Contacts or Registrations page - children should be the pages with email field
+    $submissions = wire("pages")->get($parent_str); // This is the Contacts or Registrations page - its children represent individual submitters whose children in turn hold details of each submission from that email address.
     
     $records = array();
 
@@ -649,7 +668,7 @@ class ProcessContactPages extends Process {
           $submission_data["date"] = date('Y-m-d', $submission_data["timestamp"]);
         }
         foreach ($submission_data as $key => $value) {
-          
+          // Exclude items already formatted and added
           $should_display = $key !== "fname" && $key !== "lname" && $key !== "consent" && $key !== "timestamp";
 
           if($should_display){
@@ -672,7 +691,6 @@ class ProcessContactPages extends Process {
         $table->row($row_out);
       }
       $table_title = $submission_type === "contacts" ? "Contact form submissions" : ucfirst($submission_type);
-      // $table_rows
       $out = "<h2>$table_title</h2>";
       $out .= $table->render();
 
@@ -741,7 +759,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
  *
  * @param String $status - "Pending", "Processed", "Completed", Accepted", "Reminded"
  * @param String $page_name - Needed for execute when identifying target of $input->post operations
- * @param String $submission_type - Needed to determine correct button value
+ * @param String $button value
  * @return Form with appropriate button
  */ 
   protected function getStatusForm($status, $page_name, $button_value){
@@ -754,10 +772,8 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $field->attr("name", "submission");
     
     $status_string = strtolower($status);
-    // $form->class .= " form--$status_string";
     $form->addClass("uk-form--$status_string");
 
-    //TODO: Change the colour of the status button in customInputfieldFormRender() - just got to work out the logic of checking for "active-form" on #437
     $field->set("value", $page_name);
     $form->add($field);
 
@@ -767,6 +783,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     if($button_value === "Rejected"){
       
+      // We also need "Accepted" button
       $button->addClass("ui-button--rejected"); 
       $accepted_button = $this->modules->get("InputfieldSubmit");
       $accepted_button->value = "Accepted";
@@ -825,16 +842,19 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $email = $submission_data["email"];
 
     if($email) {
-      // We don't have such a user yet
+      // Make sure account doesn't already exist for this email
       $u = wire("users")->get("email=$email");
       if($u->id) throw new WireException($e . "An account exists for this email address.");
 
+      // Make sure account doesn't already exist for this username
       $un = $submission_data["username"];
       $u = wire("users")->get("name=$un");
       if($u->id) throw new WireException($e . "An account exists for this user name.");
 
       // Make new user
       $u = wire("users")->add($un);
+
+      // Get roles for new account from module config
       $u_roles = explode(",", $this["reg_roles"]);
       foreach ($u_roles as $u_role){
         $u->of(false);
@@ -867,7 +887,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
   }
 /**
  * Login user - may have temporary password
- *
+ * This is intended to be used to add password reset to a login endpoint
  * @param Page $user
  * @param String $username
  * @param String $pass
