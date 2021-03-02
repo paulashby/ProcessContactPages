@@ -584,8 +584,7 @@ class ProcessContactPages extends Process {
             break;
 
           case 'Completed':
-            //TODO: Implement this
-            bd("Completed - remove data from Contacts section - could display notice");
+            $this->removeSubmission($submission_page);
             break;
           
           default:
@@ -807,7 +806,24 @@ protected function getTableRows($records, $column_keys, $submission_type){
  * Create new user for approved registration request
  *
  * @param Page $submission - the submission page
- * @return User
+ * @return Notice
+ */
+  protected function removeSubmission($submission){
+    
+    $siblings = $submission->siblings(false);
+
+    // Remove parent too if there are no other submissions from this email address
+    $rmv_page = count($siblings) ? $submission : $submission->parent;
+
+    wire("pages")->delete($rmv_page, true);
+
+    return wire("notices")->message("Another little job done");
+  }
+/**
+ * Create new user for approved registration request
+ *
+ * @param Page $submission - the submission page
+ * @return Notice
  */
   protected function rejectRegistration($submission){
     
@@ -827,7 +843,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     $submission_parent = $submission->parent;
     wire("pages")->delete($submission_parent, true); // Delete submission and its parent
-    wire("notices")->message("A rejection message has been sent to the email provided");
+    return wire("notices")->message("A rejection message has been sent to the email provided");
   }
 /**
  * Create new user for approved registration request
