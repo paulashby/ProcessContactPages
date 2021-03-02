@@ -30,6 +30,7 @@ class ProcessContactPages extends Process {
 
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
+    $this->addHookAfter("ProcessModule::executeEdit", $this, "nag");
 
     // Associate file with profile template
     if($this["prfx"]){
@@ -40,6 +41,10 @@ class ProcessContactPages extends Process {
       $profile_t->save();
     }
   }
+  public function nag($event) {
+    $this->checkPrivacyPolicy();
+  }
+
 /**
  * Store info for created elements and pass to completeInstall function
  *
@@ -59,13 +64,12 @@ class ProcessContactPages extends Process {
 
     if($configured) {
 
-
       $curr_config = $this->modules->getConfig($this->className);
 
       if ($this->configValueChanged($curr_config, $data)) {
 
         // Show error for attempted changes and resubmit existing data.
-        $this->session->error("Unable to change settings for this module after installation. If you really need to make changes, you can reinstall the module, but be aware that this will mean losing the data currently in the system");
+        $this->session->error("Unable to change settings for this module. If you really need to make changes, you can reinstall the module, but be aware that this will mean losing the data currently in the system");
 
         $event->arguments(1, $curr_config);
 
@@ -260,7 +264,8 @@ class ProcessContactPages extends Process {
   public function renderForm($form_title, $handler_url = false) {
 
     // Don't want to present a form to user if privacy policy has not been populated
-    if($this->privacyPolicyExists()){
+    if($this->checkPrivacyPolicy()){
+
       $prfx = $this["prfx"];
 
       // Include script tag for handler if provided
@@ -378,16 +383,24 @@ class ProcessContactPages extends Process {
     // If parse_as_array is true this will return an array, else an object
     $data = json_decode(wire("sanitizer")->unentities($encoded_str));
     return $parse_as_array ? get_object_vars($data) : $data;
-  } 
+  }
 /**
- * Check for existence of Privacy Policy
+ * Check if Privacy Policy is populated and display warning on back end if not.
+ * Note: this only checks that the policy isn't completely empty
  *
  * @return Boolean
  */
-  protected function privacyPolicyExists() {
+  protected function checkPrivacyPolicy() {
     $prfx = $this["prfx"];
     $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
-    return $page->id && $page[$this["prfx"] . "_document"];
+
+    if($page->id){
+      $page_path = $page->path();
+      if($page[$this["prfx"] . "_document"]) return true;
+      $this->warning("Please populate your Privacy Policy at $page_path. Forms will throw errors until the policy is updated."); 
+      return false;
+    }
+    throw new WireException($e . "Privacy Policy page does not exist.");
   }
 /**
  * Custom uninstall 
@@ -414,12 +427,19 @@ class ProcessContactPages extends Process {
 
       // Safe to proceed - remove ref and tmp_pw fields from user template
       $prfx = $this["prfx"];
-      //TODO: Are we having ref field in this module?
-      $this->removeFields(array("{$prfx}_ref", "{$prfx}_tmp_pass"));
+      
+      //TODO: Are we having ref field in this module or will it ultimately be part of GDPR module?
+
+      // Remove custom fields from user fieldgroup - these will be themselves removed by the removeSet call to PageMaker module
+      $usr_template = wire("templates")->get("user");
+      $ufg = $usr_template->fieldgroup;
+      $ufg->remove("{$prfx}_ref");
+      $ufg->remove("{$prfx}_tmp_pass");
+      $ufg->save();
 
       /*
       Remove the fields and templates of the contact system pages
-      $report_pg_errs false as pages as will already have been removed via the button on the Contact admin page
+      $report_pg_errs false as pages will already have been removed via the button on the Contact admin page
       */
       $page_maker->removeSet("contact_pages", false);
 
@@ -593,6 +613,8 @@ class ProcessContactPages extends Process {
         }
       }
     }
+    $this->checkPrivacyPolicy();
+    
     // Display Contact and Regsitration tables
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
@@ -695,7 +717,7 @@ class ProcessContactPages extends Process {
 
       return $out;
     }
-    return "No pending $submission_type";
+    return "No pending $submission_type.\n";
   }  
 /**
  * Add records as table rows 
