@@ -28,7 +28,7 @@ if($config->ajax) {
 					$mssg = "Form appears to have been submitted by a bot with IP address details $ipf (HTTP_X_FORWARDED_FOR) and $ipr (REMOTE_ADDR)";
 					wire("log")->save("bot-activity", $mssg);
 
-					return json_encode(array("success"=>false, "error"=>"The form contained erros")); 
+					return json_encode(array("success"=>false, "error"=>"The form contained errors")); 
 				}
 
 				// No consent
@@ -53,7 +53,7 @@ if($config->ajax) {
 				if($submitted["error"]){
 					return json_encode(array("success"=>false, "error"=>$submitted["error"]));
 				}
-				return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible")); 
+				return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.")); 
 			} else {
 				return json_encode(array("success"=>false, "error"=>"The form contained no data"));
 			}
@@ -91,6 +91,15 @@ function sanitizeSubmission($data, $sanitizer) {
 			    }
 	    		break;
 
+	    	case 'username':
+	    		// 2nd arg to santizer = beautify returned name https://processwire.com/api/ref/sanitizer/name/
+	    		$sanitized[$field] = $sanitizer->name($value, true); 
+	    		$exists = wire("users")->get($sanitized[$field])->id;
+			  	if($exists){
+			    	$errors[] = "Username unavailable - please try again.";
+			    }
+	    		break;
+
 	    	case 'url':
 	    		$sanitized[$field] = $sanitizer->url($value);
 			  	if( ! strlen($sanitized[$field])){
@@ -100,7 +109,7 @@ function sanitizeSubmission($data, $sanitizer) {
 
 	    	case 'message':
 	    		//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
-	    		$sanitized[$field] = $sanitizer->text($value, array("stripQuotes"=>true));
+	    		$sanitized[$field] = $sanitizer->textarea($value);
 	    		break;
 
 	    	case 'consent':	    		
