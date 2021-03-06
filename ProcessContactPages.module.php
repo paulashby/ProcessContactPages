@@ -41,10 +41,24 @@ class ProcessContactPages extends Process {
       $profile_t->save();
     }
   }
+/**
+ * Get names of immutable config entries 
+ * - those that can't be changed after installation
+ *
+ * @return Array [$string Name of immutable entry]
+ */
+  protected function getImmutable() {
+
+      return array(
+        "contact_root_location",
+        "prfx",
+        "t_access",
+        "reg_roles"
+      );
+  }
   public function nag($event) {
     $this->checkPrivacyPolicy();
   }
-
 /**
  * Store info for created elements and pass to completeInstall function
  *
@@ -66,7 +80,8 @@ class ProcessContactPages extends Process {
 
       $curr_config = $this->modules->getConfig($this->className);
 
-      if ($this->configValueChanged($curr_config, $data)) {
+      // if ($this->configValueChanged($curr_config, $data)) {
+      if ($this->approveConfig($curr_config, $data)) {
 
         // Show error for attempted changes and resubmit existing data.
         $this->session->error("Unable to change settings for this module. If you really need to make changes, you can reinstall the module, but be aware that this will mean losing the data currently in the system");
@@ -91,10 +106,10 @@ class ProcessContactPages extends Process {
       if($contact_root->id) {
         $contact_root_path = $contact_root->path();
       } else {
-        // Install in root if not provided
-        //TODO: Might be better to abort if root not provided - that  way, won't auto install anything until properly configured - so we need to remove the configured flag here and return if root hasn't been provided
+        // Install in root if not provided 
+        $contact_root = wire("pages")->get(1);
+        $data["contact_root_location"] = 1;
         $contact_root_path = "/";
-        $contact_root = $this->pages->get("/");
       }
 
       $prfx = $data["prfx"];
@@ -108,12 +123,21 @@ class ProcessContactPages extends Process {
       $profile_t->noAppendTemplateFile = true; 
       $profile_t->save();
 
+      //TODO: Can we set the root page to hidden?
+
       // Create array of required pages containing three associative arrays whose member keys are the names of the respective elements
+      //TODO: signature_text should be a textarea and should be included in the markup array of $init_settings() 
       $pgs = array(
         "fields" => array(
           "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup"),
           "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup"),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
+
+          // "{$prfx}_signature_image" => array("fieldtype"=>"FieldtypeImage", "label"=>"Email signature image"),
+
+          // Using this until we can test using image from processwire - if poss, switch to above field           
+          "{$prfx}_signature_image_path" => array("fieldtype"=>"FieldtypeText", "label"=>"URL of email signature image"),
+          "{$prfx}_signature_text" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature text"),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission"),
@@ -125,6 +149,11 @@ class ProcessContactPages extends Process {
           "{$prfx}-submitter" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message"), "t_fields"=>array("{$prfx}_email")),
           "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message")),
           "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
+          "{$prfx}-setting-signature" => array("t_parents" => array("{$prfx}-section"), "t_fields"=>array(
+            // Using image_page until we can test processwire image on live site
+            // "{$prfx}_signature_image",
+            "{$prfx}_signature_image_path",
+            "{$prfx}_signature_text")),
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
@@ -136,6 +165,7 @@ class ProcessContactPages extends Process {
           "active" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Active"),
           "documents" => array("template" => "{$prfx}-setting-documents", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
           "forms" => array("template" => "{$prfx}-setting-forms", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Forms"),
+          "email-signature" => array("template" => "{$prfx}-setting-signature", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Email Signature"),
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"),
@@ -161,9 +191,13 @@ class ProcessContactPages extends Process {
         // Additional settings for fields and templates
         $init_settings = array(
           "fields" => array(
-            "ck_editor" => array("{$prfx}_document"), 
+            "ck_editor" => array("{$prfx}_document", "{$prfx}_signature_text"), 
             "html_ee" => array("{$prfx}_submission"),
-            "markup" => array("{$prfx}_markup"),
+            "markup" => array("{$prfx}_markup", "{$prfx}_signature_text"),
+            "image" => array(
+              // Not using processwire image field until we can test on live site
+              // "{$prfx}_signature_image"
+            ),
             "version_controlled" => array("{$prfx}_markup", "{$prfx}_document", "{$prfx}_status")
           ),
           "vc_templates" => array("{$prfx}-form", "{$prfx}-document", "{$prfx}-message")
@@ -347,7 +381,7 @@ class ProcessContactPages extends Process {
     
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
-      "{$prfx}_email" => $params["email"], //TODO: Is email required here? It's already on parent page!
+      // "{$prfx}_email" => $params["email"], //TODO: Is email required here? It's already on parent page!
       "{$prfx}_submission" => json_encode($params),
       "{$prfx}_status" => $submission_status
     );
@@ -391,6 +425,13 @@ class ProcessContactPages extends Process {
  * @return Boolean
  */
   protected function checkPrivacyPolicy() {
+
+    $contact_root = wire("pages")->get($this["contact_root_location"]);
+    $system_exists = count($contact_root->children("name=contact-pages"));
+    bd($contact_root->children("name=contact-pages"), "contact root children");
+    
+    if( ! $system_exists) return true; // Don't throw exception if system has been removed
+    
     $prfx = $this["prfx"];
     $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
 
@@ -414,7 +455,7 @@ class ProcessContactPages extends Process {
 
     $page_maker = $this->modules->get("PageMaker");
     $page_maker_config = $this->modules->getConfig("PageMaker"); 
-    
+
     // Check for active contacts before uninstalling
     if($this->inUse(array_keys($this["paths"]))){
       
@@ -506,6 +547,12 @@ class ProcessContactPages extends Process {
         $f->set("contentType", 1);
         $f->save();
       }
+      if(in_array($field, $init_settings["fields"]["image"])){
+
+        // Set extensions
+        $f->set("extensions", "gif jpg jpeg png");
+        $f->save();
+      }
       if(in_array($field, $init_settings["fields"]["version_controlled"])){
 
         // Activate version control
@@ -515,6 +562,7 @@ class ProcessContactPages extends Process {
     foreach ($init_settings["vc_templates"] as $t_name) {
 
       // Activate version control
+      $vc_data["enable_all_templates"] = false;
       $vc_data["enabled_templates"][] = wire("templates")->get($t_name)->id;
     }
     wire("modules")->saveModuleConfigData("VersionControl", $vc_data);
@@ -539,21 +587,24 @@ class ProcessContactPages extends Process {
     return false;
   }
 /**
- * Check for changes to module config
+ * Check for changes to immutable array items
  *
  * @param Array $new_config New config array to check
  * @return Boolean false or the current config
  */
-  protected function configValueChanged ($curr_config, $new_config) {
+  protected function approveConfig ($curr_config, $new_config) {
 
-   foreach ($new_config as $key => $val) {
+   $immutable = $this->getImmutable();
 
-    if( array_key_exists($key, $curr_config) &&
-      $new_config[$key] !== $curr_config[$key]){
-        return true;
+    foreach ($new_config as $key => $val) {
+
+      if( array_key_exists($key, $curr_config) &&
+          $new_config[$key] !== $curr_config[$key] &&
+          in_array($key, $immutable)){
+        return false;
       }
     }
-    return false;
+    return true;
   } 
 /**
  * Remove top margin from button
@@ -603,8 +654,8 @@ class ProcessContactPages extends Process {
             $this->rejectRegistration($submission_page);
             break;
 
-          case 'Completed':
-            $this->removeSubmission($submission_page);
+          case 'Resolved':
+            $this->removeSubmission($submission_page, "Resolved submission removed from system");
             break;
           
           default:
@@ -614,7 +665,7 @@ class ProcessContactPages extends Process {
       }
     }
     $this->checkPrivacyPolicy();
-    
+
     // Display Contact and Regsitration tables
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
@@ -679,27 +730,66 @@ class ProcessContactPages extends Process {
         $approved = $status === "Accepted" || $status === "Reminded";
         if($approved) continue;
 
+        // Template for order of entries in table - any additional elements get added to end of array
         $record = array(
-          // Concatenate name fields
-          "name" => $submission_data["fname"] . " " . $submission_data["lname"]
+          "date" => "",
+          "name" => "",
+          "username" => "",
+          "address" => "",
+          "email" => "",
+          "tel" => "",
+          "url" => "",
+          "message" => ""
         ); 
-        if(array_key_exists("timestamp", $submission_data)){
-          
-          // Convert timestamp to formatted string
-          $submission_data["date"] = date('Y-m-d', $submission_data["timestamp"]);
-        }
-        foreach ($submission_data as $key => $value) {
-          // Exclude items already formatted and added
-          $should_display = $key !== "fname" && $key !== "lname" && $key !== "consent" && $key !== "timestamp";
 
-          if($should_display){
-            $record[$key] = $value;
-          } 
+        if(array_key_exists("timestamp", $submission_data)){
+          // Convert timestamp to formatted string
+          $record["date"] = date('Y-m-d', $submission_data["timestamp"]);
+           unset($submission_data["timestamp"]);
         }
-        ksort($record);
-        $record["status"] = $status;
-        $header_row_settings = array_unique(array_merge($header_row_settings, array_keys($record)));
-        $records[$submission->name] = $record;
+        if(array_key_exists("fname", $submission_data)){
+          // Concatonate first and last names
+          if(array_key_exists("lname", $submission_data)){
+            $record["name"] = $submission_data["fname"] . " " . $submission_data["lname"];
+            unset($submission_data["fname"]);
+            unset($submission_data["lname"]);
+          } else{
+            throw new WireException($e . ". Postcode is required.");  
+          }
+        }
+        if(array_key_exists("address", $submission_data)){
+          // Concatonate address and postcode
+          if(array_key_exists("postcode", $submission_data)){
+            $record["address"] = $submission_data["address"] . "\n" .  $submission_data["postcode"];
+            unset($submission_data["address"]);
+            unset($submission_data["postcode"]);
+          } else{
+            throw new WireException($e . ". Postcode is required.");  
+          }
+        }
+        // Add remaining submitted values to record
+        foreach ($submission_data as $key => $value) {
+          /*
+           * Don't
+           * - add consent to record (will have been granted for all successful submissions). 
+           * - attempt to add entries that may not exist (such as url on contact forms). 
+           * - overwrite entries that are have already been added to record (such as address)
+           */
+          $show_in_table = $key !== "consent" && (! array_key_exists($key, $record) || ! strlen($record[$key]));
+          if($show_in_table){
+            $record[$key] = $value;
+          }
+        }
+        // Remove unpopulated items from record - these were included in the record template (above) but weren't submitted
+        foreach ($record as $key => $value) {
+          if( ! strlen($record[$key])){
+            unset($record[$key]);
+          }
+        }
+       
+       $record["status"] = $status;
+       $header_row_settings = array_unique(array_merge($header_row_settings, array_keys($record)));
+       $records[$submission->name] = $record;
       }
     }
     if(count($records)){
@@ -749,7 +839,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     if($status === "Pending") return "Processed";
     if($submission_type === "registrations") return "Rejected";
-    return "Completed";
+    return "Resolved";
   }
 /**
  * Get single table row
@@ -778,7 +868,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
 /**
  * Assembles form with status button for Contact page listings
  *
- * @param String $status - "Pending", "Processed", "Completed", Accepted", "Reminded"
+ * @param String $status - "Pending", "Processed", "Resolved", Accepted", "Reminded"
  * @param String $page_name - Needed for execute when identifying target of $input->post operations
  * @param String $button value
  * @return Form with appropriate button
@@ -828,9 +918,10 @@ protected function getTableRows($records, $column_keys, $submission_type){
  * Create new user for approved registration request
  *
  * @param Page $submission - the submission page
+ * @param String $message - message to display on success
  * @return Notice
  */
-  protected function removeSubmission($submission){
+  protected function removeSubmission($submission, $message){
     
     $siblings = $submission->siblings(false);
 
@@ -839,7 +930,44 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     wire("pages")->delete($rmv_page, true);
 
-    return wire("notices")->message("Another little job done");
+    return wire("notices")->message($message);
+  }
+/**
+ * Get signature from contact-pages/settings/email-signature/
+ *
+ * @return String signature
+ */
+  public function getSignature(){
+
+    $sig_pg = wire("pages")->get("email-signature");
+    $prfx = $this["prfx"];
+
+    $sig = "";
+    
+    // Get signature page (created on module installation)
+    if($sig_pg->id){
+      
+      // Get signature image - using text field for URL until we can test using processwire image field on live site
+      // $img = $sig_pg["{$prfx}_signature_image"]->first();
+      $filepath = $sig_pg["{$prfx}_signature_image_path"];
+     
+      // if($img){
+      if($filepath){
+        
+        // This image doesn't load from the primitive subdomain, but that may be because subdomain SSL certificates don't work - try on live site
+        
+        // $filepath = $img->httpUrl;
+
+        $sig .= "<img src='$filepath' width='150'>";
+      }
+
+      // Get signature text
+      $txt = $sig_pg["{$prfx}_signature_text"];
+      if($txt){
+        $sig .= $txt;
+      }
+    }
+    return $sig;
   }
 /**
  * Create new user for approved registration request
@@ -853,19 +981,17 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
     $email = $submission_data["email"];
 
-    $message = "This is a message from Paper Bird to inform you that we are unable to provide you with a user account at this time";
-    $message .= "\nBest regards,\nThe Paper Bird team.";
-    //TODO: Add these settings to the config?
-    //TODO: Add an image to signature
-    $signature = "\n\nPaper Bird Publishing\n020 8613 8085\n07766 164 807\nwww.paperbirdpublishing.co.uk";
-    $message .= $signature;
-
-    $http_host = wire("config")->httpHost;
-    mail($email, "Paper Bird Registration Request", $message, "From: noreply@$http_host"); 
+    $message = array(
+      "This is a message from Paper Bird to inform you that we are unable to provide you with a user account at this time",
+      "Best regards,",
+      "The Paper Bird team"
+    );
+    $this->sendHTMLmail($email, "Paper Bird Registration Request", $message);
 
     $submission_parent = $submission->parent;
-    wire("pages")->delete($submission_parent, true); // Delete submission and its parent
-    return wire("notices")->message("A rejection message has been sent to the email provided");
+
+    return $this->removeSubmission($submission, "A rejection message has been sent to the email provided");
+
   }
 /**
  * Create new user for approved registration request
@@ -911,17 +1037,55 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $u["{$prfx}_ref"] = $submission->parent->title;
       $u->save();
       $u->of(true); 
-      $message = "Your registration request was successful and your temporary password on the Paper Bird site is: $pass\n";
-      $message .= "Please change it after you login.";
-      //TODO: Add these settings to the config?
-      //TODO: Add an image to signature
-      $signature = "\n\nPaper Bird Publishing\n020 8613 8085\n07766 164 807\nwww.paperbirdpublishing.co.uk";
-      $message .= $signature;
-      $http_host = wire("config")->httpHost;
-      mail($u->email, "Password reset", $message, "From: noreply@$http_host"); 
+      $message = array(
+        "Your registration request was successful and your temporary password on the Paper Bird site is: $pass",
+        "Please change it after you login."
+      );
+      $this->sendHTMLmail($u->email, "Password reset", $message); 
 
-      return wire("notices")->message("Customer account successfully created");
+      // Remove registration form submission from contact system
+      $this->removeSubmission($submission, "Customer account successfully created");
+
+      return $u;
     }
+  }
+  /**
+ * Send HTML email
+ *
+ * @param String $to - email address of recipient
+ * @param String $subject
+ * @param Array $message - array of strings - one per para
+ * @return User
+ */
+  public function sendHTMLmail($to, $subject, $message){
+
+    $message_markup = "<p>" . implode("</p><p>", $message) . "</p>";
+    $message_markup .= $this->getSignature();
+
+    $content = "
+    <!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.0 Transitional//EN' 'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'>
+    <html xmlns='http://www.w3.org/1999/xhtml' lang='en-GB'>
+    <head>
+      <meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
+      <title>Email Test</title>
+      <meta name='viewport' content='width=device-width, initial-scale=1.0'/>
+
+      <style type='text/css'>
+        a[x-apple-data-detectors] {color: inherit !important;}
+      </style>
+
+    </head>
+    <body>
+    $message_markup
+    </body>
+    </html>
+    ";
+
+    $http_host = wire("config")->httpHost;
+    $headers = "From: noreply@$http_host\n";
+    $headers .= "MIME-Version: 1.0\n";
+    $headers .= "Content-Type: text/html; charset=utf-8\n";
+    mail($to, $subject, $content, $headers);
   }
 /**
  * Login user - may have temporary password
