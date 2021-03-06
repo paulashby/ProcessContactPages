@@ -37,7 +37,7 @@ $config = array(
 	"contactRegRole" => array(
 		"name"=> "reg_roles",
 		"type" => "text", 
-		"label" => "Roles for automatically created accounts",
+		"label" => "Roles for automatically created accounts (can't be reset after installation)",
 		"description" => "Please provide a comma-separated list of role names or IDs.",  
 		"value" => "", 
 		"requiredif" => "autoreg=1"
