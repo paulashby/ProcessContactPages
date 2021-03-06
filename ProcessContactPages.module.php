@@ -369,7 +369,6 @@ class ProcessContactPages extends Process {
     
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
-      // "{$prfx}_email" => $params["email"], //TODO: Is email required here? It's already on parent page!
       "{$prfx}_submission" => json_encode($params),
       "{$prfx}_status" => $submission_status
     );
