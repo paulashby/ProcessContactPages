@@ -83,15 +83,15 @@ class ProcessContactPages extends Process {
       // if ($this->configValueChanged($curr_config, $data)) {
       if ($this->approveConfig($curr_config, $data)) {
 
-        // Show error for attempted changes and resubmit existing data.
-        $this->session->error("Unable to change settings for this module. If you really need to make changes, you can reinstall the module, but be aware that this will mean losing the data currently in the system");
-
-        $event->arguments(1, $curr_config);
+        // All good - config unchanged
+        $event->arguments(1, $data);
 
       } else {
 
-        // All good - config unchanged
-        $event->arguments(1, $data);
+        // Show error for attempted changes and resubmit existing data.
+        $this->session->error("You can only change these settings by reinstalling the module. But please be aware that this will mean losing the current contact data");
+
+        $event->arguments(1, $curr_config);
       }
     } else {
      
@@ -123,24 +123,21 @@ class ProcessContactPages extends Process {
       $profile_t->noAppendTemplateFile = true; 
       $profile_t->save();
 
-      //TODO: Can we set the root page to hidden?
-
       // Create array of required pages containing three associative arrays whose member keys are the names of the respective elements
-      //TODO: signature_text should be a textarea and should be included in the markup array of $init_settings() 
       $pgs = array(
         "fields" => array(
-          "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup"),
-          "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup"),
+          "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup", "config"=>array("markup")),
+          "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup", "config"=>array("ck_editor")),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
 
           // "{$prfx}_signature_image" => array("fieldtype"=>"FieldtypeImage", "label"=>"Email signature image"),
 
           // Using this until we can test using image from processwire - if poss, switch to above field           
           "{$prfx}_signature_image_path" => array("fieldtype"=>"FieldtypeText", "label"=>"URL of email signature image"),
-          "{$prfx}_signature_text" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature text"),
+          "{$prfx}_signature_text" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature text", "config"=>array("ck_editor", "markup")),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
-          "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission"),
+          "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission", "config"=>array("html_ee")),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
         ),
         "templates" => array(
@@ -160,7 +157,7 @@ class ProcessContactPages extends Process {
           "{$prfx}-message" => array("t_parents" => array("{$prfx}-submitter"), "t_fields"=>array("{$prfx}_submission", "{$prfx}_status"))
         ),
         "pages" => array(
-          "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages"),
+          "contact-pages" => array("template" => "{$prfx}-section", "parent"=>$contact_root_path, "title"=>"Contact Pages", "status"=>array("hidden")),
           "settings" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Settings"),
           "active" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Active"),
           "documents" => array("template" => "{$prfx}-setting-documents", "parent"=>"{$contact_root_path}contact-pages/settings/", "title"=>"Documents"),
@@ -188,22 +185,13 @@ class ProcessContactPages extends Process {
 
       if($made_pages === true) {
 
-        // Additional settings for fields and templates
-        $init_settings = array(
-          "fields" => array(
-            "ck_editor" => array("{$prfx}_document", "{$prfx}_signature_text"), 
-            "html_ee" => array("{$prfx}_submission"),
-            "markup" => array("{$prfx}_markup", "{$prfx}_signature_text"),
-            "image" => array(
-              // Not using processwire image field until we can test on live site
-              // "{$prfx}_signature_image"
-            ),
-            "version_controlled" => array("{$prfx}_markup", "{$prfx}_document", "{$prfx}_status")
-          ),
-          "vc_templates" => array("{$prfx}-form", "{$prfx}-document", "{$prfx}-message")
+        // Activate version control on forms and documents that need to be tracked for gdpr
+        $version_controlled = array(
+          "fields" => array("{$prfx}_markup", "{$prfx}_document", "{$prfx}_status"),
+          "templates" => array("{$prfx}-form", "{$prfx}-document", "{$prfx}-message")
         );
-        // Apply additional settings to fields and templates
-        $this->initPages($pgs, $init_settings);
+        
+        $this->activateVersionControl($version_controlled);
 
         // Store paths to top level pages
         $data["paths"] = array(
@@ -427,8 +415,7 @@ class ProcessContactPages extends Process {
   protected function checkPrivacyPolicy() {
 
     $contact_root = wire("pages")->get($this["contact_root_location"]);
-    $system_exists = count($contact_root->children("name=contact-pages"));
-    bd($contact_root->children("name=contact-pages"), "contact root children");
+    $system_exists = count($contact_root->children("name=contact-pages, include=hidden"));
     
     if( ! $system_exists) return true; // Don't throw exception if system has been removed
     
@@ -521,45 +508,18 @@ class ProcessContactPages extends Process {
  *
  * @param Array $init_settings Contains arrays of field and template names to initialise
  */
-  protected function initPages($pgs, $init_settings) {
+  protected function activateVersionControl($versionControlled) {
 
     $vc_data = wire("modules")->getConfig("VersionControl");
 
-    foreach ($pgs["fields"] as $field => $spec) {
+    foreach ($versionControlled["fields"] as $f_name) {
 
-      $f = wire("fields")->get($field);
+      $f = wire("fields")->get($f_name);
 
-      if(in_array($field, $init_settings["fields"]["ck_editor"])){
-
-        // Set Inputfield Type to CKEditor
-        $f->set('inputfieldClass', 'InputfieldCKEditor');
-        $f->save();
-      }
-      if(in_array($field, $init_settings["fields"]["html_ee"])){
-
-        // Set Text Formatter to HTML Entity Encoder
-        $f->set("textformatters", array("TextformatterEntities"));
-        $f->save();
-      }      
-      if(in_array($field, $init_settings["fields"]["markup"])){
-
-        // Set Content Type to Markup/HTML
-        $f->set("contentType", 1);
-        $f->save();
-      }
-      if(in_array($field, $init_settings["fields"]["image"])){
-
-        // Set extensions
-        $f->set("extensions", "gif jpg jpeg png");
-        $f->save();
-      }
-      if(in_array($field, $init_settings["fields"]["version_controlled"])){
-
-        // Activate version control
-        $vc_data["enabled_fields"][] = $f->id;
-      }
+      // Activate version control
+      $vc_data["enabled_fields"][] = $f->id;
     }
-    foreach ($init_settings["vc_templates"] as $t_name) {
+    foreach ($versionControlled["templates"] as $t_name) {
 
       // Activate version control
       $vc_data["enable_all_templates"] = false;
@@ -592,7 +552,7 @@ class ProcessContactPages extends Process {
  * @param Array $new_config New config array to check
  * @return Boolean false or the current config
  */
-  protected function approveConfig ($curr_config, $new_config) {
+  protected function approveConfig($curr_config, $new_config) {
 
    $immutable = $this->getImmutable();
 
