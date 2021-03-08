@@ -31,6 +31,7 @@ class ProcessContactPages extends Process {
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
     $this->addHookAfter("ProcessModule::executeEdit", $this, "nag");
+    $this->addHook('LazyCron::every30Seconds', $this, 'myHook');
 
     // Associate file with profile template
     if($this["prfx"]){
@@ -40,6 +41,9 @@ class ProcessContactPages extends Process {
       $profile_t->filename = wire("config")->paths->root . 'site/modules/ProcessContactPages/profile.php';
       $profile_t->save();
     }
+  }
+  protected function myHook(){
+    bd("LazyCron called");
   }
 /**
  * Get names of immutable config entries 
@@ -258,14 +262,18 @@ class ProcessContactPages extends Process {
     $forms_out = "";
 
     foreach ($options as $form_options) {
-      // Add paths to javascript form hanlders if not already in $handlers array
-      if($form_options["handler"] && ! in_array($form_options["handler"], $handlers)){
-        $handlers[] = $form_options["handler"];
       
+      $markup = $this->renderForm($form_options["form"]);
+
+      if($markup){
+        // Add paths to javascript form handlers if not already in $handlers array
+        if($form_options["handler"] && ! in_array($form_options["handler"], $handlers)){
+          $handlers[] = $form_options["handler"];
+        }
+        $title = $form_options["title"];
+        $forms_out .= "<h2>$title</h2>";
+        $forms_out .= $markup;  
       }
-      $title = $form_options["title"];
-      $forms_out .= "<h2>$title</h2>";
-      $forms_out .= $this->renderForm($form_options["form"]);
     }
     $out = "<div class='pcp_forms'>";
 
@@ -290,6 +298,12 @@ class ProcessContactPages extends Process {
 
       $prfx = $this["prfx"];
 
+      // Get page with form markup
+      $form_page = wire("pages")->get("template={$prfx}-form, title=$form_title");
+      $markup = $form_page["{$prfx}_markup"];
+
+      if(!$markup) return;
+
       // Include script tag for handler if provided
       $open = $handler_url ? "<script src='$handler_url'></script><div class='pcp_form'>" : "<div class='pcp_form'>";
       $close = "<p class='form__error form__error--submission'>No Error</p></div>";
@@ -297,10 +311,6 @@ class ProcessContactPages extends Process {
       // Include token to mitigate CSRF
       $token_name = $this->token_name;
       $token_value = $this->token_value;
-
-      // Get page with form markup
-      $form_page = wire("pages")->get("template={$prfx}-form, title=$form_title");
-      $markup = $form_page["{$prfx}_markup"];
 
       // Array keys correspond to placeholder text in form markup. Value is the replacement string.
       $placeholders = array(
@@ -989,7 +999,6 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $chars = 'abcdefghjkmnopqrstuvwxyz23456789!@£$%^&*'; 
       $length = mt_rand(9,12); // password between 9 and 12 characters
       for($n = 0; $n < $length; $n++) $pass .= $chars[mt_rand(0, strlen($chars)-1)];
-        bd($pass, "password");
       $u->of(false);
       $u["email"] = $email;
       $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
