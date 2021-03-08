@@ -36,7 +36,7 @@ if($config->ajax) {
 
 				if(property_exists($params, "submission_type")){
 					$submission_type = $params->submission_type;
-					unset($params->submission_type); // Don't want stored in submission field with other params. Don't need to sanitize as not user input
+					unset($params->submission_type); // Don't want stored in submission field with other params. No need to sanitize as not user input
 				} else {
 					return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
 				}
@@ -73,7 +73,7 @@ function sanitizeSubmission($data, $sanitizer) {
 		switch ($field) {
 	    	case 'fname':
 	    	case 'lname':
-		    	//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
+		    	//TODO: $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
 	    		$sanitized[$field] = $sanitizer->text($value, array("stripQuotes"=>true));
 	    		break;
 
@@ -86,6 +86,7 @@ function sanitizeSubmission($data, $sanitizer) {
 
 	    	case 'email':
 	    		$sanitized[$field] = $sanitizer->email($value);
+	    		// $sanitizer returns blank string if invalid
 			  	if( ! strlen($sanitized[$field])){
 			    	$errors[] = "Invalid email, please try again.";
 			    }
@@ -102,14 +103,20 @@ function sanitizeSubmission($data, $sanitizer) {
 
 	    	case 'url':
 	    		$sanitized[$field] = $sanitizer->url($value);
-			  	if( ! strlen($sanitized[$field])){
-			    	$errors[] = "Invalid website address, please try again.";
-			    }
 	    		break;
 
 	    	case 'message':
-	    		//TODO: Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
+	    		// Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
 	    		$sanitized[$field] = $sanitizer->textarea($value);
+	    		break;
+
+	    	case 'address':
+	    		// Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
+	    		$sanitized[$field] = $sanitizer->textarea($value);
+	    		break;
+
+	    	case 'postcode':
+	    		$sanitized[$field] = $sanitizer->alphanumeric($value);
 	    		break;
 
 	    	case 'consent':	    		
