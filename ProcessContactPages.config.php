@@ -9,6 +9,14 @@ $config = array(
 	    "description" => "Please select a page for order storage - if no page is selected, the orders will be stored at '/contact/'", 
 	    "required" => false
 	),
+	"adminEmail" => array(
+		"name"=> "contact_admin_email",
+		"type" => "email", 
+		"label" => "Admin email",
+		"description" => "For status updates and notifications.", 
+		"value" => "", 
+		"required" => true 
+	),
 	"contactPrefix" => array(
 		"name"=> "prfx",
 		"type" => "text", 
