@@ -437,7 +437,7 @@ class ProcessContactPages extends Process {
       $this->warning("Please populate your Privacy Policy at $page_path. Forms will throw errors until the policy is updated."); 
       return false;
     }
-    throw new WireException($e . "Privacy Policy page does not exist.");
+    throw new WireException("Privacy Policy page does not exist.");
   }
 /**
  * Custom uninstall 
@@ -723,7 +723,7 @@ class ProcessContactPages extends Process {
             unset($submission_data["fname"]);
             unset($submission_data["lname"]);
           } else{
-            throw new WireException($e . ". Postcode is required.");  
+            throw new WireException("Postcode is required.");  
           }
         }
         if(array_key_exists("address", $submission_data)){
@@ -733,7 +733,7 @@ class ProcessContactPages extends Process {
             unset($submission_data["address"]);
             unset($submission_data["postcode"]);
           } else{
-            throw new WireException($e . ". Postcode is required.");  
+            throw new WireException("Postcode is required.");  
           }
         }
         // Add remaining submitted values to record
@@ -890,7 +890,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
  * @param String $message - message to display on success
  * @return Notice
  */
-  protected function removeSubmission($submission, $message){
+  protected function removeSubmission($submission, $message = false){
     
     $siblings = $submission->siblings(false);
 
@@ -898,9 +898,46 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $rmv_page = count($siblings) ? $submission : $submission->parent;
 
     wire("pages")->delete($rmv_page, true);
-
-    return wire("notices")->message($message);
+wire("log")->save("paul", "Submission removed");
+    if($message) return wire("notices")->message($message);
   }
+/**
+ * Activate account by removing registration request (called when user resets password)
+ *
+ * @param User $user - the processwire user
+ * @return Boolean
+ */
+public function activateAccount($user){
+
+    $user_email = $user->email;
+    $errors = array();
+    $prfx = $this["prfx"];
+
+    // Get regsitration request page parent
+    $regstr_req_parent = wire("pages")->get("template={$prfx}-submitter, {$prfx}_email=$user_email");
+
+    if( ! $regstr_req_parent->id){
+      $errors[] = "submission parent";
+    }
+    // Get registration request page
+    $submission = $regstr_req_parent->child("include=all");
+    if( ! $submission->id){
+      $errors[] = "submission"; 
+    }
+    if(count($errors)){
+      // Log problem and notify admin
+      $err_pages = implode(", ", $errors);
+      $mssg_preamble = "Account activation for $user_email could not be completed as the following pages could not be found:";
+      $err_mssg = "Account activation for $user_email could not be completed as the following pages could not be found: $err_pages";
+      $admin_email = $this["contact_admin_email"];
+      $this->sendHTMLmail($admin_email, "Problem activating account", array_merge(array($mssg_preamble), $errors));
+      wire("log")->save("registration-errors", $err_mssg);
+      return false;
+    }
+    wire("log")->save("registration-status", "Password change completed by $user_email. The account is now active");
+    $this->removeSubmission($submission);
+    return true;
+}
 /**
  * Get signature from contact-pages/settings/email-signature/
  *
@@ -977,12 +1014,12 @@ protected function getTableRows($records, $column_keys, $submission_type){
     if($email) {
       // Make sure account doesn't already exist for this email
       $u = wire("users")->get("email=$email");
-      if($u->id) throw new WireException($e . "An account exists for this email address.");
+      if($u->id) throw new WireException("An account exists for this email address.");
 
       // Make sure account doesn't already exist for this username
       $un = $submission_data["username"];
       $u = wire("users")->get("name=$un");
-      if($u->id) throw new WireException($e . "An account exists for this user name.");
+      if($u->id) throw new WireException("An account exists for this user name.");
 
       // Make new user
       $u = wire("users")->add($un);
@@ -1011,8 +1048,8 @@ protected function getTableRows($records, $column_keys, $submission_type){
       );
       $this->sendHTMLmail($u->email, "Password reset", $message); 
 
-      // Remove registration form submission from contact system
-      $this->removeSubmission($submission, "Customer account successfully created");
+      // Submission is removed when password has been reset - customer will be redirected to pw reset until they update it
+      wire("notices")->message("Account will be activated when customer resets password");
 
       return $u;
     }
@@ -1068,7 +1105,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $prfx = $this["prfx"];
 
     if($user->id && $user["{$prfx}_tmp_pass"] && $user["{$prfx}_tmp_pass"] === $pass) {
-     
+      wire("log")->save("paul", "User logging in with temp password");
       // user logging in with tmp_pass, so change it to be their real pass
       $tmp_pass = true;
       $user->of(false);
@@ -1080,6 +1117,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     
     if($user) {
       if($tmp_pass){
+        wire("log")->save("paul", "User has now logged in - removing temp password");
         // user is logged in, get rid of tmp_pass
         $user->of(false);
         $user["{$prfx}_tmp_pass"] = "";
