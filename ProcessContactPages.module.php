@@ -886,7 +886,6 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $rmv_page = count($siblings) ? $submission : $submission->parent;
 
     wire("pages")->delete($rmv_page, true);
-    wire("log")->save("paul", "Submission removed");
     if($message) return wire("notices")->message($message);
   }
 /**
@@ -1170,7 +1169,7 @@ public function activateAccount($user){
     $prfx = $this["prfx"];
 
     if($user->id && $user["{$prfx}_tmp_pass"] && $user["{$prfx}_tmp_pass"] === $pass) {
-      wire("log")->save("paul", "User logging in with temp password");
+
       // user logging in with tmp_pass, so change it to be their real pass
       $tmp_pass = true;
       $user->of(false);
@@ -1182,7 +1181,7 @@ public function activateAccount($user){
     
     if($user) {
       if($tmp_pass){
-        wire("log")->save("paul", "User has now logged in - removing temp password");
+
         // user is logged in, get rid of tmp_pass
         $user->of(false);
         $user["{$prfx}_tmp_pass"] = "";
