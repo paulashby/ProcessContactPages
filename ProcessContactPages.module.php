@@ -31,7 +31,7 @@ class ProcessContactPages extends Process {
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
     $this->addHookAfter("ProcessModule::executeEdit", $this, "nag");
-    $this->addHook('LazyCron::every30Seconds', $this, 'myHook');
+    $this->addHook('LazyCron::everyDay', $this, 'updateRegistrations');
 
     // Associate file with profile template
     if($this["prfx"]){
@@ -41,9 +41,6 @@ class ProcessContactPages extends Process {
       $profile_t->filename = wire("config")->paths->root . 'site/modules/ProcessContactPages/profile.php';
       $profile_t->save();
     }
-  }
-  protected function myHook(){
-    bd("LazyCron called");
   }
 /**
  * Get names of immutable config entries 
@@ -133,12 +130,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_markup" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Form markup", "config"=>array("markup")),
           "{$prfx}_document" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Document markup", "config"=>array("ck_editor")),
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
-
-          // "{$prfx}_signature_image" => array("fieldtype"=>"FieldtypeImage", "label"=>"Email signature image"),
-
-          // Using this until we can test using image from processwire - if poss, switch to above field           
-          "{$prfx}_signature_image_path" => array("fieldtype"=>"FieldtypeText", "label"=>"URL of email signature image"),
-          "{$prfx}_signature_text" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature text", "config"=>array("ck_editor", "markup")),
+          "{$prfx}_signature" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature", "config"=>array("ck_editor", "markup")),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission", "config"=>array("html_ee")),
@@ -150,11 +142,7 @@ class ProcessContactPages extends Process {
           "{$prfx}-submitter" => array("t_parents" => array("{$prfx}-section-active"), "t_children" => array("{$prfx}-message"), "t_fields"=>array("{$prfx}_email")),
           "{$prfx}-registrations" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-message")),
           "{$prfx}-setting-forms" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-form")),
-          "{$prfx}-setting-signature" => array("t_parents" => array("{$prfx}-section"), "t_fields"=>array(
-            // Using image_page until we can test processwire image on live site
-            // "{$prfx}_signature_image",
-            "{$prfx}_signature_image_path",
-            "{$prfx}_signature_text")),
+          "{$prfx}-setting-signature" => array("t_parents" => array("{$prfx}-section"), "t_fields"=>array("{$prfx}_signature")),
           "{$prfx}-form" => array("t_parents" => array("{$prfx}-setting-forms"), "t_fields"=>array("{$prfx}_markup")),
           "{$prfx}-setting-documents" => array("t_parents" => array("{$prfx}-section"), "t_children" => array("{$prfx}-document")),
           "{$prfx}-document" => array("t_parents" => array("{$prfx}-section-documents"), "t_fields"=>array("{$prfx}_document")),
@@ -898,7 +886,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $rmv_page = count($siblings) ? $submission : $submission->parent;
 
     wire("pages")->delete($rmv_page, true);
-wire("log")->save("paul", "Submission removed");
+    wire("log")->save("paul", "Submission removed");
     if($message) return wire("notices")->message($message);
   }
 /**
@@ -943,37 +931,11 @@ public function activateAccount($user){
  *
  * @return String signature
  */
-  public function getSignature(){
+  protected function getSignature(){
 
     $sig_pg = wire("pages")->get("email-signature");
     $prfx = $this["prfx"];
-
-    $sig = "";
-    
-    // Get signature page (created on module installation)
-    if($sig_pg->id){
-      
-      // Get signature image - using text field for URL until we can test using processwire image field on live site
-      // $img = $sig_pg["{$prfx}_signature_image"]->first();
-      $filepath = $sig_pg["{$prfx}_signature_image_path"];
-     
-      // if($img){
-      if($filepath){
-        
-        // This image doesn't load from the primitive subdomain, but that may be because subdomain SSL certificates don't work - try on live site
-        
-        // $filepath = $img->httpUrl;
-
-        $sig .= "<img src='$filepath' width='150'>";
-      }
-
-      // Get signature text
-      $txt = $sig_pg["{$prfx}_signature_text"];
-      if($txt){
-        $sig .= $txt;
-      }
-    }
-    return $sig;
+    return $sig_pg["{$prfx}_signature"];
   }
 /**
  * Create new user for approved registration request
@@ -985,12 +947,11 @@ public function activateAccount($user){
     
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+    $username = $submission["fname"];
     $email = $submission_data["email"];
 
     $message = array(
-      "This is a message from Paper Bird to inform you that we are unable to provide you with a user account at this time",
-      "Best regards,",
-      "The Paper Bird team"
+      "Dear $username,", "This is a message from Paper Bird to inform you that we are unable to provide you with a customer account at this time", "Best wishes,","The Paper Bird team"
     );
     $this->sendHTMLmail($email, "Paper Bird Registration Request", $message);
 
@@ -1054,6 +1015,107 @@ public function activateAccount($user){
       return $u;
     }
   }
+/**
+ * Initiate process of updating accepted registrations (sending password reset reminders and removing submissions with outsanding reminders)
+ * @param  String $status - "accepted" or "reminded"
+ * @return Boolean
+ */
+  protected function updateRegistrations(){
+    bd("updateRegistrations called");
+   
+    $this->progressRegistrations("Accepted");
+    $this->progressRegistrations("Reminded");
+  }
+/**
+ * Progress any accepted registrations that are due an update
+ * @param  String $status - "Accepted" or "Reminded"
+ * @return Boolean
+ */
+  protected function progressRegistrations($status){
+
+    $prfx = $this["prfx"];
+    $registrations =  wire("pages")->find("template={$prfx}-message, {$prfx}_status=$status, include=all");
+
+    foreach ($registrations as $registration) {
+
+      if($this->updateRequired($registration)) $this->progressRegistration($registration, $status);
+    } 
+  }
+/**
+ * Perform actions on accepted regsitration submission based on status
+ * @param  Page $registration - the submission page
+ * @param  String $status - "Accepted" or "Reminded"
+ */
+  protected function progressRegistration($registration, $status){
+
+    $status_actions = array(
+      "Accepted" => function($registration){
+        // Send reminder
+        $prfx = $this["prfx"];
+        $encoded_str = $registration["{$prfx}_submission"];
+        $submission = get_object_vars(json_decode(wire("sanitizer")->unentities($encoded_str)));
+        $firstname = $submission["fname"];
+        $email = $submission["email"];
+
+        $this->sendHTMLmail($email, "Don't forget to reset your password", array("Hi $firstname,", "We recently sent you a temporary password which should be used to activate your account. Please log in and update your details.", "If you didn't see the message, it may be in your junk mail folder."));
+        
+        // Update status to "Reminded"
+        $registration->of(false);
+        $registration->set("{$prfx}_status", "Reminded");
+        $registration->save();
+
+      },
+      "Reminded" => function($registration){
+        
+        // Customer failed to update after reminder. Remove account from system
+        $prfx = $this["prfx"];
+        $encoded_str = $registration["{$prfx}_submission"];
+        $submission = get_object_vars(json_decode(wire("sanitizer")->unentities($encoded_str)));
+        $firstname = $submission["fname"];
+        $username = $submission["username"];
+        $email = $submission["email"];
+
+        // Remove user account
+        $inactive = wire("users")->get($username);
+        wire("users")->delete($inactive);
+
+        // Remove related Contact pages
+        $this->removeSubmission($registration);
+
+        // Notify customer
+        $this->sendHTMLmail($email, "Account not activated", array("Dear $firstname,", "As your customer account was not activated, it has now been removed from our system for security reasons.","If you do still require an account, please submit a new registration request via our web form.","Best wishes,", "The Paper Bird team"));
+
+        // Notify admin
+        $admin_email = $this["contact_admin_email"];
+        $this->sendHTMLmail($this["contact_admin_email"], "Customer failed to activate account", array("Hi $admin_email,","Just a quick heads up that a password reset email was sent to $email, but the customer failed to login. They were emailed a reminder a week ago, but have still not updated their details. For security reasons, this account has now been removed from the system."));
+      }
+    );
+    // Pass each $registration to corresponding $status_action function
+    $status_actions[$status]($registration);
+  }
+/**
+ * Determine whether accepted registration submission is due to be updated
+ * @param  Page registration - the submission page
+ * @return Boolean
+ */
+  protected function updateRequired($registration){
+    
+    // Get date of last status update from VersionControl module
+    $vc = wire("modules")->get("VersionControl");
+    $history = $vc->getHistory($registration);
+    $last_update_timestamp = $history["data"][0]["timestamp"];
+    $last_update = strtotime($last_update_timestamp); 
+    
+    // Time now
+    $date = date_create();
+    $curr_time = date_timestamp_get($date);
+    $week = 7 * 24 * 60 * 60;
+
+    $time_since_update = $curr_time - $last_update;
+    
+    //TODO: Allow user a week before reminding and the same before deleting the account
+    return $time_since_update > $week;
+  }
   /**
  * Send HTML email
  *
@@ -1091,6 +1153,9 @@ public function activateAccount($user){
     $headers .= "MIME-Version: 1.0\n";
     $headers .= "Content-Type: text/html; charset=utf-8\n";
     mail($to, $subject, $content, $headers);
+    // bd($to, "to");
+    // bd($subject, "subject");
+    // bd($content, "content", array("maxLength"=>1032));
   }
 /**
  * Login user - may have temporary password
