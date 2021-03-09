@@ -1020,8 +1020,7 @@ public function activateAccount($user){
  * @return Boolean
  */
   protected function updateRegistrations(){
-    bd("updateRegistrations called");
-   
+
     $this->progressRegistrations("Accepted");
     $this->progressRegistrations("Reminded");
   }
@@ -1112,7 +1111,7 @@ public function activateAccount($user){
 
     $time_since_update = $curr_time - $last_update;
     
-    //TODO: Allow user a week before reminding and the same before deleting the account
+    // Allow user a week before reminding and the same before deleting the account
     return $time_since_update > $week;
   }
   /**
@@ -1152,9 +1151,6 @@ public function activateAccount($user){
     $headers .= "MIME-Version: 1.0\n";
     $headers .= "Content-Type: text/html; charset=utf-8\n";
     mail($to, $subject, $content, $headers);
-    // bd($to, "to");
-    // bd($subject, "subject");
-    // bd($content, "content", array("maxLength"=>1032));
   }
 /**
  * Login user - may have temporary password
