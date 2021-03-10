@@ -132,6 +132,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_signature" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature", "config"=>array("ck_editor", "markup")),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
+          "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Registration form submission timestamp"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission", "config"=>array("html_ee")),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
@@ -202,6 +203,8 @@ class ProcessContactPages extends Process {
         $ufg = $usr_template->fieldgroup;
         $ref_f = wire("fields")->get("{$prfx}_ref");
         $ufg->add($ref_f);
+        $timestamp_f = wire("fields")->get("{$prfx}_timestamp");
+        $ufg->add( $timestamp_f);
         $temp_pw_f = wire("fields")->get("{$prfx}_tmp_pass");
         $ufg->add($temp_pw_f);
         $ufg->save();
@@ -322,8 +325,7 @@ class ProcessContactPages extends Process {
  */
    public function processSubmission($params, $submission_type) {
 
-    $date = date_create();
-    $params["timestamp"] = date_timestamp_get($date);
+    $params["timestamp"] = $this->timestampNow();
     $email = $params["email"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
@@ -459,6 +461,7 @@ class ProcessContactPages extends Process {
       $usr_template = wire("templates")->get("user");
       $ufg = $usr_template->fieldgroup;
       $ufg->remove("{$prfx}_ref");
+      $ufg->remove("{$prfx}_timestamp");
       $ufg->remove("{$prfx}_tmp_pass");
       $ufg->save();
 
@@ -998,8 +1001,9 @@ public function activateAccount($user){
       for($n = 0; $n < $length; $n++) $pass .= $chars[mt_rand(0, strlen($chars)-1)];
       $u->of(false);
       $u["email"] = $email;
-      $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
       $u["{$prfx}_ref"] = $submission->parent->title;
+      $u["{$prfx}_timestamp"] = $submission_data["timestamp"];
+      $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
       $u->save();
       $u->of(true); 
       $message = array(
@@ -1105,14 +1109,22 @@ public function activateAccount($user){
     $last_update = strtotime($last_update_timestamp); 
     
     // Time now
-    $date = date_create();
-    $curr_time = date_timestamp_get($date);
+    $curr_time = $this->timestampNow();
     $week = 7 * 24 * 60 * 60;
 
     $time_since_update = $curr_time - $last_update;
     
     // Allow user a week before reminding and the same before deleting the account
     return $time_since_update > $week;
+  }
+/**
+ * Get timestamp for current time
+ * @return Integer
+ */
+  protected function timestampNow(){
+    // Time now
+    $date = date_create();
+    return date_timestamp_get($date);
   }
   /**
  * Send HTML email
@@ -1145,7 +1157,7 @@ public function activateAccount($user){
     </body>
     </html>
     ";
-
+    wire("log")->save("pw-reset-debug", $content);
     $http_host = wire("config")->httpHost;
     $headers = "From: noreply@$http_host\n";
     $headers .= "MIME-Version: 1.0\n";
