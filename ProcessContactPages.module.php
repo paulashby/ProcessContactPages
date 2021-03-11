@@ -132,7 +132,6 @@ class ProcessContactPages extends Process {
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_signature" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature", "config"=>array("ck_editor", "markup")),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
-          "{$prfx}_timestamp" => array("fieldtype"=>"FieldtypeText", "label"=>"Registration form submission timestamp"),
           "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission", "config"=>array("html_ee")),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
@@ -203,8 +202,8 @@ class ProcessContactPages extends Process {
         $ufg = $usr_template->fieldgroup;
         $ref_f = wire("fields")->get("{$prfx}_ref");
         $ufg->add($ref_f);
-        $timestamp_f = wire("fields")->get("{$prfx}_timestamp");
-        $ufg->add( $timestamp_f);
+        $submission_f = wire("fields")->get("{$prfx}_submission");
+        $ufg->add($submission_f);
         $temp_pw_f = wire("fields")->get("{$prfx}_tmp_pass");
         $ufg->add($temp_pw_f);
         $ufg->save();
@@ -461,7 +460,7 @@ class ProcessContactPages extends Process {
       $usr_template = wire("templates")->get("user");
       $ufg = $usr_template->fieldgroup;
       $ufg->remove("{$prfx}_ref");
-      $ufg->remove("{$prfx}_timestamp");
+      $ufg->remove("{$prfx}_submission");
       $ufg->remove("{$prfx}_tmp_pass");
       $ufg->save();
 
@@ -615,7 +614,7 @@ class ProcessContactPages extends Process {
             break;
 
           case 'Resolved':
-            $this->removeSubmission($submission_page, "Resolved submission removed from system");
+            $this->removeSubmission($submission_page, "Submission removed from system");
             break;
           
           default:
@@ -629,9 +628,13 @@ class ProcessContactPages extends Process {
     // Display Contact and Regsitration tables
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
+    $live_submissions = strpos($out, "pw-table") !== false;
 
-    // Add data removal button
-    $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
+    if($live_submissions){
+      // Add data removal button
+      $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
+    }
+
     return $out;
   }
   public function ___executeConfirm() {
@@ -1002,7 +1005,7 @@ public function activateAccount($user){
       $u->of(false);
       $u["email"] = $email;
       $u["{$prfx}_ref"] = $submission->parent->title;
-      $u["{$prfx}_timestamp"] = $submission_data["timestamp"];
+      $u["{$prfx}_submission"] = $submission["{$prfx}_submission"]; // Store submitted data for GDPR compliance
       $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
       $u->save();
       $u->of(true); 
