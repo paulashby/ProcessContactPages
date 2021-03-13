@@ -1041,9 +1041,11 @@ public function activateAccount($user){
     $prfx = $this["prfx"];
     $registrations =  wire("pages")->find("template={$prfx}-message, {$prfx}_status=$status, include=all");
 
-    foreach ($registrations as $registration) {
+    if(count($registrations)){
+      foreach ($registrations as $registration) {
 
-      if($this->updateRequired($registration)) $this->progressRegistration($registration, $status);
+        if($this->updateRequired($registration)) $this->progressRegistration($registration, $status);
+      }
     } 
   }
 /**
