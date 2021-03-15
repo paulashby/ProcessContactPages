@@ -31,16 +31,6 @@ class ProcessContactPages extends Process {
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
     $this->addHookAfter("ProcessModule::executeEdit", $this, "nag");
-    $this->addHook('LazyCron::everyDay', $this, 'updateRegistrations');
-
-    // Associate file with profile template
-    if($this["prfx"]){
-      $prfx = $this["prfx"];
-      $profile_t = $this->templates->get("{$prfx}_profile");
-      if(! $profile_t) return;
-      $profile_t->filename = wire("config")->paths->root . 'site/modules/ProcessContactPages/profile.php';
-      $profile_t->save();
-    }
   }
 /**
  * Get names of immutable config entries 
@@ -115,15 +105,6 @@ class ProcessContactPages extends Process {
 
       $prfx = $data["prfx"];
 
-      // Make profile template for password resets
-      $profile_t = new Template();
-      $profile_t->name = "{$prfx}_profile";
-      $profile_t->fieldgroup = $this->templates->get("basic-page")->fieldgroup;
-      $profile_t->compile = 0;
-      $profile_t->noPrependTemplateFile = true;
-      $profile_t->noAppendTemplateFile = true; 
-      $profile_t->save();
-
       // Create array of required pages containing three associative arrays whose member keys are the names of the respective elements
       $pgs = array(
         "fields" => array(
@@ -132,7 +113,7 @@ class ProcessContactPages extends Process {
           "{$prfx}_email" => array("fieldtype"=>"FieldtypeEmail", "label"=>"Contact email address"),
           "{$prfx}_signature" => array("fieldtype"=>"FieldtypeTextarea", "label"=>"Email signature", "config"=>array("ck_editor", "markup")),
           "{$prfx}_ref" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact reference code"),
-          "{$prfx}_tmp_pass" => array("fieldtype"=>"FieldtypeText", "label"=>"Temporary password"),          
+          "{$prfx}_pending" => array("fieldtype"=>"FieldtypeCheckbox", "label"=>"Account awaiting approval"),
           "{$prfx}_submission" => array("fieldtype"=>"FieldtypeText", "label"=>"Contact submission", "config"=>array("html_ee")),
           "{$prfx}_status" => array("fieldtype"=>"FieldtypeText", "label"=>"Submission status"),
         ),
@@ -158,8 +139,7 @@ class ProcessContactPages extends Process {
           "contacts" => array("template" => "{$prfx}-section-active", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Contacts"),
           "registrations" => array("template" => "{$prfx}-registrations", "parent"=>"{$contact_root_path}contact-pages/active/", "title"=>"Registrations"),
           "privacy-policy" => array("template" => "{$prfx}-document", "parent"=>"{$contact_root_path}contact-pages/settings/documents/", "title"=>"Privacy Policy"),
-          "tools" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Tools"),
-          "profile" => array("template" => "{$prfx}_profile", "parent"=>"{$contact_root_path}", "title"=>"Profile") 
+          "tools" => array("template" => "{$prfx}-section", "parent"=>"{$contact_root_path}contact-pages/", "title"=>"Tools") 
         )
       );
 
@@ -204,8 +184,8 @@ class ProcessContactPages extends Process {
         $ufg->add($ref_f);
         $submission_f = wire("fields")->get("{$prfx}_submission");
         $ufg->add($submission_f);
-        $temp_pw_f = wire("fields")->get("{$prfx}_tmp_pass");
-        $ufg->add($temp_pw_f);
+        $pending_f = wire("fields")->get("{$prfx}_pending");
+        $ufg->add($pending_f);
         $ufg->save();
 
       } else {
@@ -302,8 +282,17 @@ class ProcessContactPages extends Process {
       $token_name = $this->token_name;
       $token_value = $this->token_value;
 
+      $base = wire("config")->urls;
+      $cssUrl = $base->InputfieldPassword."InputfieldPassword.css";
+
       // Array keys correspond to placeholder text in form markup. Value is the replacement string.
       $placeholders = array(
+        "css-import-placeholder" => "<link rel='stylesheet' href='" . $base->InputfieldPassword . "InputfieldPassword.css'>",
+        "jquery-import-placeholder" => "<script src='" . $base->JqueryCore . "JqueryCore.js'></script>",
+        "complexify-import-placeholder" => "<script src='" . $base->InputfieldPassword . "complexify/jquery.complexify.min.js'></script>",
+        "complexifybanlist-import-placeholder" => "<script src='" . $base->InputfieldPassword . "complexify/jquery.complexify.banlist.js'></script>",
+        "xregexp-import-placeholder" => "<script src='" . $base->JqueryCore . "xregexp.min.js'></script>",
+        "inputfieldpassword-import-placeholder" => "<script src='" . $base->InputfieldPassword . "InputfieldPassword.js'></script>",
         "csrf-token-placeholder" => "<input type='hidden' id='submission_token' name='$token_name' value='$token_value'>"
       );
 
@@ -319,7 +308,7 @@ class ProcessContactPages extends Process {
  * Process form submission - create new entry in /contact-pages/active/contacts/submitter 
  *
  * @param Array $params - submitted with form - these MUST be pre-santized and validated
- * @param String $submission_type - "contact" or "register"
+ * @param String $submission_type - "contact" or "registration"
  * @return JSON - success true with message or success false with conflated error message
  */
    public function processSubmission($params, $submission_type) {
@@ -331,10 +320,14 @@ class ProcessContactPages extends Process {
     $submitter_parent = "{$submission_type}s";
     $parent_str = $this["paths"][$submitter_parent];
     $submitter = wire("pages")->get("parent=$parent_str,{$prfx}_email=$email");
+    $pass = $params["pass"];
     
     if($submitter->id){
 
       $submission_parent = $submitter;
+
+      //TODO: $submission_type is checked four times in this function - is there a cleaner way?
+
       if($submission_type === "registration") return array("error"=>"A registration request for this email address is already being processed");
     
     } else {
@@ -350,7 +343,7 @@ class ProcessContactPages extends Process {
         "title" => $this->getID(),
         "{$prfx}_email" => $email
       );
-      // Make parent page for submissions form this email address
+      // Make parent page for submissions fromm this email address
       $submission_parent = wire("pages")->add($submitter_tmplt, $parent_str, $item_data);
     }
     // Use number of current submissions from this email address to get numerical suffix
@@ -365,16 +358,26 @@ class ProcessContactPages extends Process {
      * This is because it turns out that 'backgound checks' for regsitrations only take a few mins, so the "Pending" to "Processed" stage is overkill
      */
     $submission_status = $submission_type === "contact" ? "Pending" : "Processed";
-    
+
+    // Remove password from submission data
+    unset($params["pass"]);
+    unset($params["_pass"]);
+
+    $encoded_submission = json_encode($params);
+
     $item_data = array(
       "title" => $submission_parent->title . $title_sffx,
-      "{$prfx}_submission" => json_encode($params),
+      "{$prfx}_submission" => $encoded_submission,
       "{$prfx}_status" => $submission_status
     );
     $submission = wire("pages")->add($submitter_tmplt, $submission_parent->url, $item_data);
 
     if( ! $submission->id) return array("error"=>"There was a problem submitting your message. Please try again later");
-    
+
+    if($submission_type === "registration"){
+
+      $this->createUserAccount($params["username"], $email, $pass, $encoded_submission, $submission);
+    }
     return true;  
   }  
 /**
@@ -441,8 +444,14 @@ class ProcessContactPages extends Process {
     $page_maker = $this->modules->get("PageMaker");
     $page_maker_config = $this->modules->getConfig("PageMaker"); 
 
-    // Check for active contacts before uninstalling
-    if($this->inUse(array_keys($this["paths"]))){
+    /* 
+     * Warn if Contact Pages tree exists. There may be ongoing submissions in addition to
+     * various custom forms, the privacy policy, email signature etc in the settings section
+    */
+    $prfx = $this["prfx"];
+    $contact_pages = wire("pages")->get("template=$prfx-section, name=contact-pages");
+
+    if($contact_pages->id){
       
       // There are active contacts - abort uninstall
       $this->error("The module could not be uninstalled as live data exists. If you want to proceed, you can remove all order data from the Admin/Contact page and try again.");
@@ -461,6 +470,7 @@ class ProcessContactPages extends Process {
       $ufg = $usr_template->fieldgroup;
       $ufg->remove("{$prfx}_ref");
       $ufg->remove("{$prfx}_submission");
+      // $ufg->remove("{$prfx}_pending");
       $ufg->remove("{$prfx}_tmp_pass");
       $ufg->save();
 
@@ -469,13 +479,6 @@ class ProcessContactPages extends Process {
       $report_pg_errs false as pages will already have been removed via the button on the Contact admin page
       */
       $page_maker->removeSet("contact_pages", false);
-
-      // Remove the ajax template that was installed by init()
-      $prfx = $this["prfx"];
-      $profile_t = $this->templates->get("{$prfx}_profile");
-      if($profile_t) {
-        wire('templates')->delete($profile_t);
-      }
 
       parent::uninstall();
     } 
@@ -525,25 +528,6 @@ class ProcessContactPages extends Process {
       $vc_data["enabled_templates"][] = wire("templates")->get($t_name)->id;
     }
     wire("modules")->saveModuleConfigData("VersionControl", $vc_data);
-  }
-/**
- * Check it's safe to delete provided pages
- *
- * @param array $ps Names of pages to check
- * @return boolean true if pages are in use
- */
-  protected function inUse($contact_parents) {
-
-    // Check for ongoing contacts
-    foreach ($contact_parents as $pg) {
-      $selector = 'name=' . $pg;
-      $curr_p = $this->pages->findOne($selector);
-
-      if($curr_p->id > 0){
-        return true; 
-      }
-    }
-    return false;
   }
 /**
  * Check for changes to immutable array items
@@ -604,9 +588,42 @@ class ProcessContactPages extends Process {
         $submission_page = wire("pages")->get("name=$submission");
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
+        //TODO: Could rethink account creation so we avoid emailing unencrypted passwords:
+        /*
+
+          Include password fields on the original registration form
+          so the user doesn't have to reset.
+
+          Add a "Pending" checkbox to the user template.
+          Set it to checked.
+
+          Hook into $session->login to make logins check whether user is "Pending"
+
+          If so, redirects to page or just shows message 
+          "Your account request is still being processed. We'll send a confirmation email to xxxx as soon as it's all been set up for you."
+
+          At this point, it's still listed in the Contact page Regsitration Requests section.
+          
+          If request is accepted
+            - the submission pages are removed
+            - the "Pending" checkbox is unchecked
+            - a confirmation email is sent to the user
+
+          If request is rejected
+            - the submission pages are removed
+             - a confirmation email is sent to the user
+
+        */
+
+
+             
+
+
         switch ($operation) {
           case 'Accepted':
-            $this->createUserAccount($submission_page);
+          // NOTE: createUserAccount is now called when processing submission
+          // This should be an activateAccount function which just sets "pending" to 0
+            $this->activateUserAccount($submission_page);
             break;
 
           case 'Rejected':
@@ -628,19 +645,15 @@ class ProcessContactPages extends Process {
     // Display Contact and Regsitration tables
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
-    $live_submissions = strpos($out, "pw-table") !== false;
-
-    if($live_submissions){
-      // Add data removal button
-      $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
-    }
+    
+    $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
 
     return $out;
   }
   public function ___executeConfirm() {
 
     // Double check it's OK to delete order data
-    return "<h4>WARNING: This will remove the entire contact system. Are you sure you want to delete your contact data?</h4>
+    return "<h4>WARNING: This will remove the entire contact system. Are you sure you want to delete your contact data along with all your custom forms and documents?</h4>
       <a href='./' class='ui-button ui-button--cancel ui-button--pop ui-button--cancel ui-state-default'>Cancel</a>
       <a href='./deletecontacts' class='ui-button ui-button--nuclear ui-state-default'>Yes, get on with it!</a>";
   }
@@ -734,7 +747,7 @@ class ProcessContactPages extends Process {
         foreach ($submission_data as $key => $value) {
           /*
            * Don't
-           * - add consent to record (will have been granted for all successful submissions). 
+           * - add consent to record (will have been granted for all successful submissions).
            * - attempt to add entries that may not exist (such as url on contact forms). 
            * - overwrite entries that are have already been added to record (such as address)
            */
@@ -878,7 +891,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     return wire("config")->paths->templates . $tmplt;
   }
 /**
- * Create new user for approved registration request
+ * Remove submission pages for approved registration request
  *
  * @param Page $submission - the submission page
  * @param String $message - message to display on success
@@ -895,20 +908,21 @@ protected function getTableRows($records, $column_keys, $submission_type){
     if($message) return wire("notices")->message($message);
   }
 /**
- * Activate account by removing registration request (called when user resets password)
+ * Finalise account activation by removing registration request
  *
  * @param User $user - the processwire user
  * @return Boolean
  */
-public function activateAccount($user){
+public function finaliseRequest($user){
 
     $user_email = $user->email;
     $errors = array();
     $prfx = $this["prfx"];
-
+    bd($user);// Yes
+    bd($user_email, "user_email");
     // Get regsitration request page parent
     $regstr_req_parent = wire("pages")->get("template={$prfx}-submitter, {$prfx}_email=$user_email");
-
+bd($regstr_req_parent, "regstr_req_parent"); //No
     if( ! $regstr_req_parent->id){
       $errors[] = "submission parent";
     }
@@ -920,11 +934,10 @@ public function activateAccount($user){
     if(count($errors)){
       // Log problem and notify admin
       $err_pages = implode(", ", $errors);
-      $mssg_preamble = "Account activation for $user_email could not be completed as the following pages could not be found:";
-      $err_mssg = "Account activation for $user_email could not be completed as the following pages could not be found: $err_pages";
+      $err_mssg= array("There was an error during account activation for $user_email.","The following pages were not removed as they could not be found: $err_pages");
       $admin_email = $this["contact_admin_email"];
-      $this->sendHTMLmail($admin_email, "Problem activating account", array_merge(array($mssg_preamble), $errors));
-      wire("log")->save("registration-errors", $err_mssg);
+      $this->sendHTMLmail($admin_email, "Error while activating account", $err_mssg);
+      wire("log")->save("registration-errors", implode(" ", $err_mssg));
       return false;
     }
     wire("log")->save("registration-status", "Password change completed by $user_email. The account is now active");
@@ -943,7 +956,7 @@ public function activateAccount($user){
     return $sig_pg["{$prfx}_signature"];
   }
 /**
- * Create new user for approved registration request
+ * Reject registration request
  *
  * @param Page $submission - the submission page
  * @return Notice
@@ -971,54 +984,71 @@ public function activateAccount($user){
  * @param Page $submission - the submission page
  * @return User
  */
-  protected function createUserAccount($submission){
+  protected function createUserAccount($username, $email, $pass, $encoded_submission, $submission){
     
     $prfx = $this["prfx"];
+    // $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+
+    // processSubmission() has already checked for existing account using this email address   
+      
+    // Make sure account doesn't already exist for this username
+    $u = wire("users")->get($username);
+    if($u->id) throw new WireException("An account exists for this user name.");
+
+    // Make new user
+    $u = wire("users")->add($username);
+    wire("log")->save("create-ac-debug", "pass = $pass");
+
+    // Get roles for new account from module config
+    $u_roles = explode(",", $this["reg_roles"]);
+    $u->of(false);
+    foreach ($u_roles as $u_role){
+      $u->addRole($u_role);
+    }
+    $u["{$prfx}_pending"] = 1;
+    $u->email = $email;
+    $u->pass = $pass;
+    $u["{$prfx}_submission"] = $encoded_submission;
+    $u["{$prfx}_ref"] = $submission->parent->title;
+    $u->save();
+    $u->of(true); 
+    $message = array(
+      "Thank you for your registration request","We'll send a confirmation email as soon as it's all been set up for you."
+    );
+    $this->sendHTMLmail($u->email, "Your account registration", $message); 
+
+    return $u;
+
+  }
+/**
+ * Activate approved account
+ *
+ * @param Page $submission - the submission page
+ * @return User
+ */
+protected function activateUserAccount($submission){
+
+    $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
-    $email = $submission_data["email"];
+    $un = $submission_data["username"];
 
-    if($email) {
-      // Make sure account doesn't already exist for this email
-      $u = wire("users")->get("email=$email");
-      if($u->id) throw new WireException("An account exists for this email address.");
+    $u = wire("users")->get("name=$un");
 
-      // Make sure account doesn't already exist for this username
-      $un = $submission_data["username"];
-      $u = wire("users")->get("name=$un");
-      if($u->id) throw new WireException("An account exists for this user name.");
-
-      // Make new user
-      $u = wire("users")->add($un);
-
-      // Get roles for new account from module config
-      $u_roles = explode(",", $this["reg_roles"]);
-      foreach ($u_roles as $u_role){
-        $u->of(false);
-        $u->addRole($u_role);
-        $u->save();
-      }
-      // generate a random, temporary password - see https://processwire.com/talk/topic/1716-integrating-a-member-visitor-login-form/
-      $pass = '';
-      $chars = 'abcdefghjkmnopqrstuvwxyz23456789!@£$%^&*'; 
-      $length = mt_rand(9,12); // password between 9 and 12 characters
-      for($n = 0; $n < $length; $n++) $pass .= $chars[mt_rand(0, strlen($chars)-1)];
+    if($u->id){
       $u->of(false);
-      $u["email"] = $email;
-      $u["{$prfx}_ref"] = $submission->parent->title;
-      $u["{$prfx}_submission"] = $submission["{$prfx}_submission"]; // Store submitted data for GDPR compliance
-      $u["{$prfx}_tmp_pass"] = $pass; // populate a temporary pass to their profile
+      $u["{$prfx}_pending"] = 0;
       $u->save();
       $u->of(true); 
+
+      $name = ucfirst($submission_data["fname"]);
+
       $message = array(
-        "Your registration request was successful and your temporary password on the Paper Bird site is: $pass",
-        "Please change it after you login."
+        "Hi $name,","Great news - your account request has been approved and you can now log in using the username and password you set up when you registered."
       );
-      $this->sendHTMLmail($u->email, "Password reset", $message); 
-
-      // Submission is removed when password has been reset - customer will be redirected to pw reset until they update it
-      wire("notices")->message("Account will be activated when customer resets password");
-
-      return $u;
+      $this->sendHTMLmail($u->email, "Your new account", $message);
+      $this->finaliseRequest($u);
+    } else {
+      wire("log")->save("registration-errors", "No user found with username $un");
     }
   }
 /**
@@ -1061,7 +1091,7 @@ public function activateAccount($user){
         $prfx = $this["prfx"];
         $encoded_str = $registration["{$prfx}_submission"];
         $submission = get_object_vars(json_decode(wire("sanitizer")->unentities($encoded_str)));
-        $firstname = $submission["fname"];
+        $firstname = ucfirst($submission["fname"]);
         $email = $submission["email"];
 
         $this->sendHTMLmail($email, "Don't forget to reset your password", array("Hi $firstname,", "We recently sent you a temporary password which should be used to activate your account. Please log in and update your details.", "If you didn't see the message, it may be in your junk mail folder."));
@@ -1090,7 +1120,7 @@ public function activateAccount($user){
         $this->removeSubmission($registration);
 
         // Notify customer
-        $this->sendHTMLmail($email, "Account not activated", array("Dear $firstname,", "As your customer account was not activated, it has now been removed from our system for security reasons.","If you do still require an account, please submit a new registration request via our web form.","Best wishes,", "The Paper Bird team"));
+        $this->sendHTMLmail($email, "Account not activated", array("Dear $firstname,", "As your customer account was not activated, it has now been removed from our system for security reasons.","If you do still require an account, please submit a new registration request via our web form."));
 
         // Notify admin
         $admin_email = $this["contact_admin_email"];
@@ -1137,7 +1167,6 @@ public function activateAccount($user){
  * @param String $to - email address of recipient
  * @param String $subject
  * @param Array $message - array of strings - one per para
- * @return User
  */
   public function sendHTMLmail($to, $subject, $message){
 
@@ -1169,41 +1198,26 @@ public function activateAccount($user){
     $headers .= "Content-Type: text/html; charset=utf-8\n";
     mail($to, $subject, $content, $headers);
   }
-/**
- * Login user - may have temporary password
- * This is intended to be used to add password reset to a login endpoint
- * @param Page $user
- * @param String $username
- * @param String $pass
- * @return Logged in user or redirect to reset password
+  /**
+ * Login a user unless account is pending approval
+ *
+ * @param String $username - unsanitized name submitted in login form
+ * @param String $pass - unsanitized (of course) password submitted in login form
+ * @return User or error string of user account is still pending approval
  */
-  public function login($user, $username, $pass){
-    
-    $prfx = $this["prfx"];
+  public function login($username, $pass){
 
-    if($user->id && $user["{$prfx}_tmp_pass"] && $user["{$prfx}_tmp_pass"] === $pass) {
+    $username = wire("sanitizer")->username($username);
+    $user = wire("users")->get("name=$username");
 
-      // user logging in with tmp_pass, so change it to be their real pass
-      $tmp_pass = true;
-      $user->of(false);
-      $user->pass = $user["{$prfx}_tmp_pass"];
-      $user->save();
-      $user->of(true);
-    }
-    $user = wire("session")->login($username, $pass); 
-    
-    if($user) {
-      if($tmp_pass){
+    if($user->id){
 
-        // user is logged in, get rid of tmp_pass
-        $user->of(false);
-        $user["{$prfx}_tmp_pass"] = "";
-        $user->save();
-        // Redirect to the profile edit page so password can be reset
-        $profile_page = wire("pages")->get("template={$prfx}_profile")->url;
-        wire("session")->redirect($profile_page);        
-      } 
-      return $user;
+      $prfx = $this["prfx"];
+
+      if($user["{$prfx}_pending"] === 1){
+        return "Unable to complete login as this account is pending approval. Please try again when you receive your welcome email.";
+      }
+      return wire("session")->login($username, $pass);
     }
   }
 }

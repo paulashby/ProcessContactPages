@@ -1,68 +1,94 @@
 <?php namespace ProcessWire;
 
-if($config->ajax) {
+if( ! $config->ajax) throw new Wire404Exception();
 
-	if ($session->CSRF->hasValidToken('pcp_token')) {
+if ($session->CSRF->hasValidToken('pcp_token')) {
 
-		$_input = file_get_contents("php://input");
+	$_input = file_get_contents("php://input");
 
-		if($_input) {
+	if($_input) {
 
-			// Careful as user is NOT necessarily logged in
-			$req = json_decode($_input);
-			$pcp = wire("modules")->get("ProcessContactPages");
+		// Careful as user is NOT necessarily logged in
+		$req = json_decode($_input);
+		$pcp = wire("modules")->get("ProcessContactPages");
 
-			if(property_exists($req, "params")) {
+		if(property_exists($req, "params")) {
 
-				$params = $req->params;
-				$bot = isset($params->website);
+			$params = $req->params;
+			$bot = isset($params->website);
 
-				if($bot){
-					// TODO: send email to system administrator (yes, me)?
-					// Log bot activity
-					$ipf = "UNAVAILABLE";
-					if(isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
-						$ipf = $_SERVER['HTTP_X_FORWARDED_FOR'];
-					}
-					$ipr = $_SERVER['REMOTE_ADDR'];
-					$mssg = "Form appears to have been submitted by a bot with IP address details $ipf (HTTP_X_FORWARDED_FOR) and $ipr (REMOTE_ADDR)";
-					wire("log")->save("bot-activity", $mssg);
-
-					return json_encode(array("success"=>false, "error"=>"The form contained errors")); 
+			if($bot){
+				// TODO: send email to system administrator (yes, me)?
+				// Log bot activity
+				$ipf = "UNAVAILABLE";
+				if(isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
+					$ipf = $_SERVER['HTTP_X_FORWARDED_FOR'];
 				}
+				$ipr = $_SERVER['REMOTE_ADDR'];
+				$mssg = "Form appears to have been submitted by a bot with IP address details $ipf (HTTP_X_FORWARDED_FOR) and $ipr (REMOTE_ADDR)";
+				wire("log")->save("bot-activity", $mssg);
 
-				// No consent
-				if(! isset($params->consent)) return json_encode(array("success"=>false, "error"=>"Please consent to the storage of your information so we can process your message"));
-
-				if(property_exists($params, "submission_type")){
-					$submission_type = $params->submission_type;
-					unset($params->submission_type); // Don't want stored in submission field with other params. No need to sanitize as not user input
-				} else {
-					return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
-				}
-
-				$sanitized = sanitizeSubmission($params, $sanitizer);
-
-				if(gettype($sanitized) === "string") {
-					// Error string returned
-					return json_encode(array("success"=>false, "error"=>$sanitized));	
-				}
-				// Form santized and validated - pass to ProcessContactPages module for processing
-				$submitted = $pcp->processSubmission($sanitized, $submission_type);
-
-				if($submitted["error"]){
-					return json_encode(array("success"=>false, "error"=>$submitted["error"]));
-				}
-				return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.")); 
-			} else {
-				return json_encode(array("success"=>false, "error"=>"The form contained no data"));
+				return json_encode(array("success"=>false, "error"=>"The form contained errors")); 
 			}
+
+			// Check consent
+			if(! isset($params->consent)) return json_encode(array("success"=>false, "error"=>"Please consent to the storage of your information so we can process your message"));
+
+			// Check submission type
+			if(property_exists($params, "submission_type")){
+				$submission_type = $params->submission_type;
+				unset($params->submission_type); // Don't want stored in submission field with other params. No need to sanitize as not user input
+			} else {
+				return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
+			}
+
+			$sanitized = sanitizeSubmission($params, $sanitizer);
+
+			if(gettype($sanitized) === "string") {
+				// Error string returned
+				return json_encode(array("success"=>false, "error"=>$sanitized));	
+			}
+
+			// Validate password if present
+			if(property_exists($params, "pass")){
+
+				// Check password confirmation also exists
+				if(property_exists($params, "_pass")){
+					
+					$pass_params = array("pass" => $params->pass, "_pass" => $params->_pass);
+					$p = new WireInputData($pass_params); 
+
+					$inputfield_pass = $modules->get("InputfieldPassword"); // load the inputfield module
+					$inputfield_pass->attr("name","pass"); // set the name
+					$inputfield_pass->processInput($p); // process and validate the field
+
+					if($inputfield_pass->getErrors()){
+					    return json_encode(array("success"=>false, "error"=>"Invalid password: " . implode(", ", $inputfield_pass->getErrors(true))));
+					}
+				} else {
+					return json_encode(array("success"=>false, "error"=>"Password confirmation required"));
+				}
+			}
+
+			// Include validated password
+			$sanitized["pass"] = $params->pass;
+
+			// Form santized and validated - pass to ProcessContactPages module for processing
+			$submitted = $pcp->processSubmission($sanitized, $submission_type);
+
+			if($submitted["error"]){
+				return json_encode(array("success"=>false, "error"=>$submitted["error"]));
+			}
+			return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.")); 
 		} else {
-			return json_encode(array("success"=>false, "error"=>"The form contained no input"));
+			return json_encode(array("success"=>false, "error"=>"The form contained no data"));
 		}
+	} else {
+		return json_encode(array("success"=>false, "error"=>"The form contained no input"));
 	}
-	return json_encode(array("success"=>false, "error"=>"CSRF validation error"));
 }
+return json_encode(array("success"=>false, "error"=>"CSRF validation error"));
+
 function sanitizeSubmission($data, $sanitizer) {
 
 	$sanitized = array();
