@@ -924,6 +924,17 @@ public function removeRequest($user){
     $sig_pg = wire("pages")->get("email-signature");
     $prfx = $this["prfx"];
     return $sig_pg["{$prfx}_signature"];
+  }  
+/**
+ * Get privacy policy from contact-pages/settings/documents/privacy-policy/
+ *
+ * @return String signature
+ */
+  public function getPrivacyPolicy(){
+
+    $privacy_pg = wire("pages")->get("privacy-policy");
+    $prfx = $this["prfx"];
+    return $privacy_pg["{$prfx}_document"];
   }
 /**
  * Reject registration request
