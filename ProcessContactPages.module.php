@@ -31,24 +31,33 @@ class ProcessContactPages extends Process {
     $this->addHookBefore("Modules::uninstall", $this, "customUninstall");
     $this->addHookAfter("InputfieldForm::render", $this, "customInputfieldFormRender");
     $this->addHookAfter("ProcessModule::executeEdit", $this, "nag");
+    $this->addHookBefore('ProcessLogin::login', $this, "preventPendingAcctLogin");
   }
 /**
- * Get names of immutable config entries 
- * - those that can't be changed after installation
+ * Nag user to populate privacy policy
  *
- * @return Array [$string Name of immutable entry]
+ * @param  HookEvent $event
  */
-  protected function getImmutable() {
-
-      return array(
-        "contact_root_location",
-        "prfx",
-        "t_access",
-        "reg_roles"
-      );
-  }
   public function nag($event) {
+
     $this->checkPrivacyPolicy();
+  }
+/**
+ * Prevent login by users whose accounts are not yet approved
+ *
+ * @param  HookEvent $event
+ */
+  protected function preventPendingAcctLogin ($event) {
+
+    $name = $event->arguments(0);
+    $prfx = $this["prfx"];
+    $u = wire("users")->get($name);
+
+    if($u["{$prfx}_pending"] === 1){
+
+      // Prevent login
+      $event->arguments(0, "account approval pending");
+    }
   }
 /**
  * Store info for created elements and pass to completeInstall function
@@ -71,7 +80,6 @@ class ProcessContactPages extends Process {
 
       $curr_config = $this->modules->getConfig($this->className);
 
-      // if ($this->configValueChanged($curr_config, $data)) {
       if ($this->approveConfig($curr_config, $data)) {
 
         // All good - config unchanged
@@ -257,7 +265,7 @@ class ProcessContactPages extends Process {
 /**
  * Generate HTML markup for given form
  *
- * @param String $form - title of the required form
+ * @param String $form_title
  * @param String $handler_url - path to js file to handle form submission
  * @return String HTML markup
  */
@@ -311,33 +319,27 @@ class ProcessContactPages extends Process {
  * @param String $submission_type - "contact" or "registration"
  * @return JSON - success true with message or success false with conflated error message
  */
-   public function processSubmission($params, $submission_type) {
+  public function processSubmission($params, $submission_type) {
 
-    $params["timestamp"] = $this->timestampNow();
+    $username = $params["username"];
     $email = $params["email"];
+    $pass = $params["pass"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
     $submitter_parent = "{$submission_type}s";
     $parent_str = $this["paths"][$submitter_parent];
     $submitter = wire("pages")->get("parent=$parent_str,{$prfx}_email=$email");
-    $pass = $params["pass"];
+    $registration = $submission_type === "registration";
+
+    $params["timestamp"] = $this->timestampNow();
     
     if($submitter->id){
 
       $submission_parent = $submitter;
 
-      //TODO: $submission_type is checked four times in this function - is there a cleaner way?
-
-      if($submission_type === "registration") return array("error"=>"A registration request for this email address is already being processed");
+      if($registration) return array("error"=>"A registration request for this email address is already being processed");
     
     } else {
-
-      if($submission_type === "registration"){
-
-        // Check for existing account
-        $existing_user = wire("users")->get("email=$email")->id;
-        if($existing_user) return array("error"=>"An account already exists for this email address");
-      }
 
       $item_data = array(
         "title" => $this->getID(),
@@ -355,10 +357,9 @@ class ProcessContactPages extends Process {
 
     /*
      * Registrations go straight to "Processed". So they show "Accepted"/"Rejected" buttons instead of a "Processed" button like Contacts.
-     * This is because it turns out that 'backgound checks' for regsitrations only take a few mins, so the "Pending" to "Processed" stage is overkill
+     * This is because it turns out that 'backgound checks' for regsistrations only take a few mins, so the "Pending" to "Processed" stage is overkill
      */
-    $submission_status = $submission_type === "contact" ? "Pending" : "Processed";
-
+    $submission_status = $registration ? "Processed" : "Pending";
     // Remove password from submission data
     unset($params["pass"]);
     unset($params["_pass"]);
@@ -374,10 +375,21 @@ class ProcessContactPages extends Process {
 
     if( ! $submission->id) return array("error"=>"There was a problem submitting your message. Please try again later");
 
-    if($submission_type === "registration"){
+    if($registration) {
 
-      $this->createUserAccount($params["username"], $email, $pass, $encoded_submission, $submission);
+      $account_settings = array(
+        "username" => $username,
+        "email" => $email,
+        "pass" => $pass,
+        "parent_title" => $submission->parent->title,
+        "encoded_submission" => $encoded_submission
+      );
+
+      $customer_account = $this->createUserAccount($account_settings);
+
+      if(gettype($customer_account) === "string") return json_encode(array("success"=>false, "error"=>$customer_account)); 
     }
+    
     return true;  
   }  
 /**
@@ -484,28 +496,6 @@ class ProcessContactPages extends Process {
     } 
   }
 /**
- * Remove field from system
- *
- * @param Array $f_names Names of fields to be removed
- */
-  protected function removeFields($f_names){
-
-    // Traverse array of field names
-    foreach ($f_names as $f_name) {
-      $rm_fld = wire("fields")->get($f_name);
-      if($rm_fld !== null) {
-        $f_groups = $rm_fld->getFieldgroups();
-
-        // Remove from all fieldgroups
-        foreach ($f_groups as $fg) {
-          $fg->remove($rm_fld);
-          $fg->save();
-        }
-        wire("fields")->delete($rm_fld);
-      }
-    }
-  }
-/**
  * Apply field and template settings
  *
  * @param Array $init_settings Contains arrays of field and template names to initialise
@@ -531,13 +521,19 @@ class ProcessContactPages extends Process {
   }
 /**
  * Check for changes to immutable array items
- *
- * @param Array $new_config New config array to check
+ * @param Array $curr_config Existing config array
+ * @param Array $new_config New config array
  * @return Boolean false or the current config
  */
   protected function approveConfig($curr_config, $new_config) {
 
-   $immutable = $this->getImmutable();
+    $immutable = array(
+      // Config entries that can't be changed after installation
+      "contact_root_location",
+      "prfx",
+      "t_access",
+      "reg_roles"
+    );
 
     foreach ($new_config as $key => $val) {
 
@@ -588,41 +584,8 @@ class ProcessContactPages extends Process {
         $submission_page = wire("pages")->get("name=$submission");
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
-        //TODO: Could rethink account creation so we avoid emailing unencrypted passwords:
-        /*
-
-          Include password fields on the original registration form
-          so the user doesn't have to reset.
-
-          Add a "Pending" checkbox to the user template.
-          Set it to checked.
-
-          Hook into $session->login to make logins check whether user is "Pending"
-
-          If so, redirects to page or just shows message 
-          "Your account request is still being processed. We'll send a confirmation email to xxxx as soon as it's all been set up for you."
-
-          At this point, it's still listed in the Contact page Regsitration Requests section.
-          
-          If request is accepted
-            - the submission pages are removed
-            - the "Pending" checkbox is unchecked
-            - a confirmation email is sent to the user
-
-          If request is rejected
-            - the submission pages are removed
-             - a confirmation email is sent to the user
-
-        */
-
-
-             
-
-
         switch ($operation) {
           case 'Accepted':
-          // NOTE: createUserAccount is now called when processing submission
-          // This should be an activateAccount function which just sets "pending" to 0
             $this->activateUserAccount($submission_page);
             break;
 
@@ -749,7 +712,7 @@ class ProcessContactPages extends Process {
            * Don't
            * - add consent to record (will have been granted for all successful submissions).
            * - attempt to add entries that may not exist (such as url on contact forms). 
-           * - overwrite entries that are have already been added to record (such as address)
+           * - overwrite entries that have already been added to record (such as address)
            */
           $show_in_table = $key !== "consent" && (! array_key_exists($key, $record) || ! strlen($record[$key]));
           if($show_in_table){
@@ -763,13 +726,16 @@ class ProcessContactPages extends Process {
           }
         }
        
-       $record["status"] = $status;
        $header_row_settings = array_unique(array_merge($header_row_settings, array_keys($record)));
+
+       // Adding "status" to $header_row_settings only when all records have been processed to ensure it's placed in last column.
+       $record["status"] = $status;
        $records[$submission->name] = $record;
       }
     }
     if(count($records)){
       ksort($header_row_settings);
+      $header_row_settings[] = "status";
       $table->headerRow($header_row_settings);
 
       $table_rows = $this->getTableRows($records, $header_row_settings, $submission_type);
@@ -913,29 +879,33 @@ protected function getTableRows($records, $column_keys, $submission_type){
  * @param User $user - the processwire user
  * @return Boolean
  */
-public function finaliseRequest($user){
+public function removeRequest($user){
 
     $user_email = $user->email;
     $errors = array();
     $prfx = $this["prfx"];
-    bd($user);// Yes
-    bd($user_email, "user_email");
+
     // Get regsitration request page parent
     $regstr_req_parent = wire("pages")->get("template={$prfx}-submitter, {$prfx}_email=$user_email");
-bd($regstr_req_parent, "regstr_req_parent"); //No
+
     if( ! $regstr_req_parent->id){
       $errors[] = "submission parent";
     }
+
     // Get registration request page
     $submission = $regstr_req_parent->child("include=all");
     if( ! $submission->id){
       $errors[] = "submission"; 
     }
     if(count($errors)){
+
       // Log problem and notify admin
       $err_pages = implode(", ", $errors);
+
       $err_mssg= array("There was an error during account activation for $user_email.","The following pages were not removed as they could not be found: $err_pages");
+
       $admin_email = $this["contact_admin_email"];
+
       $this->sendHTMLmail($admin_email, "Error while activating account", $err_mssg);
       wire("log")->save("registration-errors", implode(" ", $err_mssg));
       return false;
@@ -965,35 +935,48 @@ bd($regstr_req_parent, "regstr_req_parent"); //No
     
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
-    $username = $submission["fname"];
+    $u_name = $submission_data["username"];
+    $fname =  ucfirst($submission["fname"]);
     $email = $submission_data["email"];
 
     $message = array(
-      "Dear $username,", "This is a message from Paper Bird to inform you that we are unable to provide you with a customer account at this time", "Best wishes,","The Paper Bird team"
+      "Dear $fname,", "We are sorry to inform you that we are unable to provide you with a customer account at this time.", "Best wishes"
     );
-    $this->sendHTMLmail($email, "Paper Bird Registration Request", $message);
+    $this->sendHTMLmail($email, "Your Registration Request", $message);
+
+    // Remove user - make sure $u_name is a valid string as we don't want to delete the wrong user!
+    if(is_string($u_name) && strlen($u_name)){
+      $rejected = wire("users")->get($u_name);
+      wire("users")->delete($rejected);
+    }
 
     $submission_parent = $submission->parent;
 
     return $this->removeSubmission($submission, "A rejection message has been sent to the email provided");
-
   }
 /**
  * Create new user for approved registration request
  *
- * @param Page $submission - the submission page
- * @return User
+ * @param Array $options - [String $username, String $email, String $pass, String $title, JSON endoded String $encoded_submission]
+ * @return User or error String
  */
-  protected function createUserAccount($username, $email, $pass, $encoded_submission, $submission){
-    
-    $prfx = $this["prfx"];
-    // $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
+  protected function createUserAccount($options){
 
-    // processSubmission() has already checked for existing account using this email address   
-      
-    // Make sure account doesn't already exist for this username
-    $u = wire("users")->get($username);
-    if($u->id) throw new WireException("An account exists for this user name.");
+    $username = $options["username"];
+    $email = $options["email"];
+    $pass = $options["pass"];
+    $parent_title = $options["parent_title"];
+    $encoded_submission = $options["encoded_submission"];
+    $prfx = $this["prfx"];
+    $errors = array();
+
+    // Check for existing account with this email
+    if(wire("users")->get("email=$email")->id) $errors[] = "An account already exists for this email address";
+
+    // Check for existing account with this username
+    if(wire("users")->get($username)->id) $errors[] = "An account exists for this user name.";
+
+    if(count($errors)) return array("error"=>implode(". ", $errors));
 
     // Make new user
     $u = wire("users")->add($username);
@@ -1009,7 +992,7 @@ bd($regstr_req_parent, "regstr_req_parent"); //No
     $u->email = $email;
     $u->pass = $pass;
     $u["{$prfx}_submission"] = $encoded_submission;
-    $u["{$prfx}_ref"] = $submission->parent->title;
+    $u["{$prfx}_ref"] = $parent_title;
     $u->save();
     $u->of(true); 
     $message = array(
@@ -1018,7 +1001,6 @@ bd($regstr_req_parent, "regstr_req_parent"); //No
     $this->sendHTMLmail($u->email, "Your account registration", $message); 
 
     return $u;
-
   }
 /**
  * Activate approved account
@@ -1046,111 +1028,10 @@ protected function activateUserAccount($submission){
         "Hi $name,","Great news - your account request has been approved and you can now log in using the username and password you set up when you registered."
       );
       $this->sendHTMLmail($u->email, "Your new account", $message);
-      $this->finaliseRequest($u);
+      $this->removeRequest($u);
     } else {
       wire("log")->save("registration-errors", "No user found with username $un");
     }
-  }
-/**
- * Initiate process of updating accepted registrations (sending password reset reminders and removing submissions with outsanding reminders)
- * @param  String $status - "accepted" or "reminded"
- * @return Boolean
- */
-  protected function updateRegistrations(){
-
-    $this->progressRegistrations("Accepted");
-    $this->progressRegistrations("Reminded");
-  }
-/**
- * Progress any accepted registrations that are due an update
- * @param  String $status - "Accepted" or "Reminded"
- * @return Boolean
- */
-  protected function progressRegistrations($status){
-
-    $prfx = $this["prfx"];
-    $registrations =  wire("pages")->find("template={$prfx}-message, {$prfx}_status=$status, include=all");
-
-    if(count($registrations)){
-      foreach ($registrations as $registration) {
-
-        if($this->updateRequired($registration)) $this->progressRegistration($registration, $status);
-      }
-    } 
-  }
-/**
- * Perform actions on accepted regsitration submission based on status
- * @param  Page $registration - the submission page
- * @param  String $status - "Accepted" or "Reminded"
- */
-  protected function progressRegistration($registration, $status){
-
-    $status_actions = array(
-      "Accepted" => function($registration){
-        // Send reminder
-        $prfx = $this["prfx"];
-        $encoded_str = $registration["{$prfx}_submission"];
-        $submission = get_object_vars(json_decode(wire("sanitizer")->unentities($encoded_str)));
-        $firstname = ucfirst($submission["fname"]);
-        $email = $submission["email"];
-
-        $this->sendHTMLmail($email, "Don't forget to reset your password", array("Hi $firstname,", "We recently sent you a temporary password which should be used to activate your account. Please log in and update your details.", "If you didn't see the message, it may be in your junk mail folder."));
-        
-        // Update status to "Reminded"
-        $registration->of(false);
-        $registration->set("{$prfx}_status", "Reminded");
-        $registration->save();
-
-      },
-      "Reminded" => function($registration){
-        
-        // Customer failed to update after reminder. Remove account from system
-        $prfx = $this["prfx"];
-        $encoded_str = $registration["{$prfx}_submission"];
-        $submission = get_object_vars(json_decode(wire("sanitizer")->unentities($encoded_str)));
-        $firstname = $submission["fname"];
-        $username = $submission["username"];
-        $email = $submission["email"];
-
-        // Remove user account
-        $inactive = wire("users")->get($username);
-        wire("users")->delete($inactive);
-
-        // Remove related Contact pages
-        $this->removeSubmission($registration);
-
-        // Notify customer
-        $this->sendHTMLmail($email, "Account not activated", array("Dear $firstname,", "As your customer account was not activated, it has now been removed from our system for security reasons.","If you do still require an account, please submit a new registration request via our web form."));
-
-        // Notify admin
-        $admin_email = $this["contact_admin_email"];
-        $this->sendHTMLmail($this["contact_admin_email"], "Customer failed to activate account", array("Hi $admin_email,","Just a quick heads up that a password reset email was sent to $email, but the customer failed to login. They were emailed a reminder a week ago, but have still not updated their details. For security reasons, this account has now been removed from the system."));
-      }
-    );
-    // Pass each $registration to corresponding $status_action function
-    $status_actions[$status]($registration);
-  }
-/**
- * Determine whether accepted registration submission is due to be updated
- * @param  Page registration - the submission page
- * @return Boolean
- */
-  protected function updateRequired($registration){
-    
-    // Get date of last status update from VersionControl module
-    $vc = wire("modules")->get("VersionControl");
-    $history = $vc->getHistory($registration);
-    $last_update_timestamp = $history["data"][0]["timestamp"];
-    $last_update = strtotime($last_update_timestamp); 
-    
-    // Time now
-    $curr_time = $this->timestampNow();
-    $week = 7 * 24 * 60 * 60;
-
-    $time_since_update = $curr_time - $last_update;
-    
-    // Allow user a week before reminding and the same before deleting the account
-    return $time_since_update > $week;
   }
 /**
  * Get timestamp for current time
@@ -1197,6 +1078,14 @@ protected function activateUserAccount($submission){
     $headers .= "MIME-Version: 1.0\n";
     $headers .= "Content-Type: text/html; charset=utf-8\n";
     mail($to, $subject, $content, $headers);
+  }
+/**
+ * Get admin email from module config
+ *
+ * @return String - email address
+ */
+  public function getAdminEmail(){
+    return $this["contact_admin_email"];
   }
   /**
  * Login a user unless account is pending approval
