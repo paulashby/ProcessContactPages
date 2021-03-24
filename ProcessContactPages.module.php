@@ -357,7 +357,7 @@ class ProcessContactPages extends Process {
 
     /*
      * Registrations go straight to "Processed". So they show "Accepted"/"Rejected" buttons instead of a "Processed" button like Contacts.
-     * This is because it turns out that 'backgound checks' for regsistrations only take a few mins, so the "Pending" to "Processed" stage is overkill
+     * This is because it turns out that 'backgound checks' for registrations only take a few mins, so the "Pending" to "Processed" stage is overkill
      */
     $submission_status = $registration ? "Processed" : "Pending";
     // Remove password from submission data
