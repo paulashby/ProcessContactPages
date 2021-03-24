@@ -321,9 +321,7 @@ class ProcessContactPages extends Process {
  */
   public function processSubmission($params, $submission_type) {
 
-    $username = $params["username"];
     $email = $params["email"];
-    $pass = $params["pass"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
     $submitter_parent = "{$submission_type}s";
@@ -331,6 +329,11 @@ class ProcessContactPages extends Process {
     $submitter = wire("pages")->get("parent=$parent_str,{$prfx}_email=$email");
     $registration = $submission_type === "registration";
 
+    if(array_key_exists("username", $params)){
+      $username = $params["username"]; 
+      $pass = $params["pass"];
+    }
+    
     $params["timestamp"] = $this->timestampNow();
     
     if($submitter->id){
@@ -582,6 +585,19 @@ class ProcessContactPages extends Process {
 
         // Update submission status
         $submission_page = wire("pages")->get("name=$submission");
+
+        if( ! $submission_page->id){
+
+          $err_mssg = array("There was an error while updating status of $submission to $operation");
+
+          $admin_email = $this["contact_admin_email"];
+
+          $this->sendHTMLmail($admin_email, "Error - submission page could not be found", $err_mssg);
+          wire("log")->save("contact-errors", implode(" ", $err_mssg));
+
+          return $err_mssg;
+
+        }
         $submission_page->setAndSave(["{$prfx}_status" => $operation]);
 
         switch ($operation) {
@@ -874,47 +890,6 @@ protected function getTableRows($records, $column_keys, $submission_type){
     if($message) return wire("notices")->message($message);
   }
 /**
- * Finalise account activation by removing registration request
- *
- * @param User $user - the processwire user
- * @return Boolean
- */
-public function removeRequest($user){
-
-    $user_email = $user->email;
-    $errors = array();
-    $prfx = $this["prfx"];
-
-    // Get regsitration request page parent
-    $regstr_req_parent = wire("pages")->get("template={$prfx}-submitter, {$prfx}_email=$user_email");
-
-    if( ! $regstr_req_parent->id){
-      $errors[] = "submission parent";
-    }
-
-    // Get registration request page
-    $submission = $regstr_req_parent->child("include=all");
-    if( ! $submission->id){
-      $errors[] = "submission"; 
-    }
-    if(count($errors)){
-
-      // Log problem and notify admin
-      $err_pages = implode(", ", $errors);
-
-      $err_mssg= array("There was an error during account activation for $user_email.","The following pages were not removed as they could not be found: $err_pages");
-
-      $admin_email = $this["contact_admin_email"];
-
-      $this->sendHTMLmail($admin_email, "Error while activating account", $err_mssg);
-      wire("log")->save("registration-errors", implode(" ", $err_mssg));
-      return false;
-    }
-    wire("log")->save("registration-status", "Password change completed by $user_email. The account is now active");
-    $this->removeSubmission($submission);
-    return true;
-}
-/**
  * Get signature from contact-pages/settings/email-signature/
  *
  * @return String signature
@@ -947,9 +922,9 @@ public function removeRequest($user){
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
     $u_name = $submission_data["username"];
-    $fname =  ucfirst($submission["fname"]);
+    $fname =  ucfirst($submission_data["fname"]);
     $email = $submission_data["email"];
-
+    bd("fname is $fname");
     $message = array(
       "Dear $fname,", "We are sorry to inform you that we are unable to provide you with a customer account at this time.", "Best wishes"
     );
@@ -960,8 +935,6 @@ public function removeRequest($user){
       $rejected = wire("users")->get($u_name);
       wire("users")->delete($rejected);
     }
-
-    $submission_parent = $submission->parent;
 
     return $this->removeSubmission($submission, "A rejection message has been sent to the email provided");
   }
@@ -991,7 +964,6 @@ public function removeRequest($user){
 
     // Make new user
     $u = wire("users")->add($username);
-    wire("log")->save("create-ac-debug", "pass = $pass");
 
     // Get roles for new account from module config
     $u_roles = explode(",", $this["reg_roles"]);
@@ -1017,7 +989,6 @@ public function removeRequest($user){
  * Activate approved account
  *
  * @param Page $submission - the submission page
- * @return User
  */
 protected function activateUserAccount($submission){
 
@@ -1039,7 +1010,7 @@ protected function activateUserAccount($submission){
         "Hi $name,","Great news - your account request has been approved and you can now log in using the username and password you set up when you registered."
       );
       $this->sendHTMLmail($u->email, "Your new account", $message);
-      $this->removeRequest($u);
+      $this->removeSubmission($submission);
     } else {
       wire("log")->save("registration-errors", "No user found with username $un");
     }
@@ -1083,7 +1054,6 @@ protected function activateUserAccount($submission){
     </body>
     </html>
     ";
-    wire("log")->save("pw-reset-debug", $content);
     $http_host = wire("config")->httpHost;
     $headers = "From: noreply@$http_host\n";
     $headers .= "MIME-Version: 1.0\n";
