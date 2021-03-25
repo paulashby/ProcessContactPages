@@ -14,6 +14,8 @@ if($input->post->username && $input->post->pass) {
    // Need to check $logged_in exists
    if(is_string($logged_in)){
       $headline = $logged_in;
+   } else if(is_null($logged_in)){
+      $headline = "Unknown user";
    } else {
       $username = ucfirst($logged_in->name);
       $headline = "Hi $username";
