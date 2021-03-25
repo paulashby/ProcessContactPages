@@ -1,39 +1,26 @@
 <?php namespace ProcessWire;
 
-if($user->isLoggedin()) $session->redirect("/internal/profile/"); 
+if($user->isLoggedin()) $session->redirect("/"); 
 
 $pcp = $modules->get("ProcessContactPages");
-$pcpc = $modules->getConfig("ProcessContactPages");
-
-if($input->post->username && $input->post->pass) {
-   $username = $sanitizer->username($input->post->username);
-   $pass = $input->post->pass;
-   $u = $users->get($username);
-   $pcp->login($u, $username, $pass);
-}
 
 // present the login form
-$headline = $input->post->username ? "Login failed" : "Please login";
-$page->body = "
-   <h2>$headline</h2>
-   <form action='./' method='post'>
-      <p>
-         <label>Username <input type='text' name='username'></label>
-         <label>Password <input type='password' name='pass'></label>
-      </p>
-      <input type='submit'>
-   </form>
-   <p><a href='/reset-pass/'>Forgot your password?</a></p>
-";
+$headline = "Please login";
 
-$hf_template = $pcpc["hf_template"];
+if($input->post->username && $input->post->pass) {
 
-// Use head/foot template if provided in module config
-if($hf_template){
-   include $config->paths->templates . $hf_template;
-} else {
-   // Use generic page furniture
-   echo "
+   $logged_in = $pcp->login($input->post->username, $input->post->pass);
+
+   // Need to check $logged_in exists
+   if(is_string($logged_in)){
+      $headline = $logged_in;
+   } else {
+      $username = ucfirst($logged_in->name);
+      $headline = "Hi $username";
+   }
+}
+
+echo "
    <!DOCTYPE html>
       <html lang='en'>
       <head>
@@ -42,8 +29,15 @@ if($hf_template){
          <title>Document</title>
       </head>
       <body>
-         {$page->body}
+         <h2>$headline</h2>
+         <form action='./' method='post'>
+            <p>
+               <label>Username <input type='text' name='username'></label>
+               <label>Password <input type='password' name='pass'></label>
+            </p>
+            <input type='submit'>
+         </form>
+         <p><a href='/reset-pass/'>Forgot your password?</a></p>
       </body>
    </html>
 ";
-}
