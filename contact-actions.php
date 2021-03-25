@@ -68,7 +68,6 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 					    return json_encode(array("success"=>false, "error"=>"Invalid password: " . implode(", ", $inputfield_pass->getErrors(true))));
 					}
 					// Include validated password
-					//TODO: Why is this here - shouldn't this go in the block above?
 					$sanitized["pass"] = $params->pass;
 				} else {
 					return json_encode(array("success"=>false, "error"=>"Password confirmation required"));
@@ -143,15 +142,15 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 	    	case 'email':
 	    		$sanitized[$field] = $sanitizer->email($value);
 	    		// $sanitizer returns blank string if invalid
-			  	if( ! preg_match("/^([\w\-\.]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))$/", $sanitized[$field])) $errors[] = "Please enter a valid email";
+				if( ! preg_match("/^([\w\-\.]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))$/", $sanitized[$field])) $errors[] = "Please enter a valid email";
 		      	break;
 
 	    	case 'username':
 	    		// 2nd arg to santizer = beautify returned name https://processwire.com/api/ref/sanitizer/name/
 	    		$sanitized[$field] = $sanitizer->name($value, true); 
 	    		$exists = wire("users")->get($sanitized[$field])->id;
-			  	if($exists) $errors[] = "Username unavailable - please try again";
-			  	if( ! preg_match("/^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/", $sanitized[$field])) $errors[] = "Please enter a username using only Letters, numbers, hyphens and underscores";
+				if($exists) $errors[] = "Username unavailable - please try again";
+				if( ! preg_match("/^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/", $sanitized[$field])) $errors[] = "Please enter a username using only Letters, numbers, hyphens and underscores";
 		      	break;
 
 	    	case 'url':
