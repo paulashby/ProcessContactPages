@@ -105,7 +105,7 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 	$errors = array();
 
 	foreach ($requirements[$submission_type] as $required_field => $label) {
-		if( ! array_key_exists($required_field, $data)){
+		if( ! property_exists($data, $required_field)){
 			$errors[] = $label;
 		}
 	}
