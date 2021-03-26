@@ -245,7 +245,9 @@ class ProcessContactPages extends Process {
 
       if($markup){
         // Add paths to javascript form handlers if not already in $handlers array
-        if($form_options["handler"] && ! in_array($form_options["handler"], $handlers)){
+        $new_handler = array_key_exists("handler", $form_options) && ! in_array($form_options["handler"], $handlers);
+        
+        if($new_handler){
           $handlers[] = $form_options["handler"];
         }
         $title = $form_options["title"];
