@@ -938,7 +938,6 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $u_name = $submission_data["username"];
     $fname =  ucfirst($submission_data["fname"]);
     $email = $submission_data["email"];
-    bd("fname is $fname");
     $message = array(
       "Dear $fname,", "We are sorry to inform you that we are unable to provide you with a customer account at this time.", "Best wishes"
     );
