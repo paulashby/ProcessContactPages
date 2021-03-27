@@ -49,9 +49,10 @@ class ProcessContactPages extends Process {
  */
   protected function preventPendingAcctLogin ($event) {
 
+    $sanitizer = wire('sanitizer');
     $name = $event->arguments(0);
     $prfx = $this["prfx"];
-    $u = wire("users")->get($name);
+    $u = wire("users")->get($sanitizer->selectorValue($name));
 
     if($u["{$prfx}_pending"] === 1){
 
@@ -214,8 +215,10 @@ class ProcessContactPages extends Process {
  */
   public function renderDocument($doc_title) {
 
-     $prfx = $this["prfx"];
-     $page = wire("pages")->get("template={$prfx}-document, title=$doc_title");
+    $sanitizer = wire('sanitizer');
+    $prfx = $this["prfx"];
+
+    $page = wire("pages")->get("template=" . $sanitizer->selectorValue("{$prfx}-document") . ", title=" . $sanitizer->selectorValue($doc_title));
 
     if($page->id){
       $data = $page["{$prfx}_document"];
@@ -276,10 +279,12 @@ class ProcessContactPages extends Process {
     // Don't want to present a form to user if privacy policy has not been populated
     if($this->checkPrivacyPolicy()){
 
+      $sanitizer = wire('sanitizer');
       $prfx = $this["prfx"];
 
       // Get page with form markup
-      $form_page = wire("pages")->get("template={$prfx}-form, title=$form_title");
+
+      $form_page = wire("pages")->get("template=" . $sanitizer->selectorValue("{$prfx}-form") . ", title=" . $sanitizer->selectorValue($form_title));
       $markup = $form_page["{$prfx}_markup"];
 
       if(!$markup) return;
@@ -323,12 +328,14 @@ class ProcessContactPages extends Process {
  */
   public function processSubmission($params, $submission_type) {
 
+    $sanitizer = wire('sanitizer');
     $email = $params["email"];
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
     $submitter_parent = "{$submission_type}s";
     $parent_str = $this["paths"][$submitter_parent];
-    $submitter = wire("pages")->get("parent=$parent_str,{$prfx}_email=$email");
+
+    $submitter = wire("pages")->get("parent=" . $sanitizer->selectorValue($parent_str) . ",{$prfx}_email=" . $sanitizer->selectorValue($email));
     $registration = $submission_type === "registration";
 
     if(array_key_exists("username", $params)){
@@ -378,7 +385,7 @@ class ProcessContactPages extends Process {
     );
     $submission = wire("pages")->add($submitter_tmplt, $submission_parent->url, $item_data);
 
-    if( ! $submission->id) return array("error"=>"There was a problem submitting your message. Please try again later");
+    if( ! $submission->id) return json_encode(array("error"=>"There was a problem submitting your message. Please try again later"));
 
     if($registration) {
 
@@ -394,7 +401,6 @@ class ProcessContactPages extends Process {
 
       if(gettype($customer_account) === "string") return json_encode(array("success"=>false, "error"=>$customer_account)); 
     }
-    
     return true;  
   }  
 /**
@@ -432,13 +438,15 @@ class ProcessContactPages extends Process {
  */
   protected function checkPrivacyPolicy() {
 
+    $sanitizer = wire('sanitizer');
     $contact_root = wire("pages")->get($this["contact_root_location"]);
     $system_exists = count($contact_root->children("name=contact-pages, include=hidden"));
     
     if( ! $system_exists) return true; // Don't throw exception if system has been removed
     
     $prfx = $this["prfx"];
-    $page = wire("pages")->get("template={$prfx}-document, title=Privacy Policy");
+
+    $page = wire("pages")->get("template=" . $sanitizer->selectorValue("{$prfx}-document") . ", title=Privacy Policy");
 
     if($page->id){
       $page_path = $page->path();
@@ -455,6 +463,7 @@ class ProcessContactPages extends Process {
  */
   public function customUninstall($event) {
 
+    $sanitizer = wire('sanitizer');
     $class = $event->arguments(0);
     if($class !== $this->className) return;
 
@@ -466,7 +475,7 @@ class ProcessContactPages extends Process {
      * various custom forms, the privacy policy, email signature etc in the settings section
     */
     $prfx = $this["prfx"];
-    $contact_pages = wire("pages")->get("template=$prfx-section, name=contact-pages");
+    $contact_pages = wire("pages")->get("template=" . $sanitizer->selectorValue("$prfx-section") . ", name=contact-pages");
 
     if($contact_pages->id){
       
@@ -485,10 +494,10 @@ class ProcessContactPages extends Process {
       // Remove custom fields from user fieldgroup - these will be themselves removed by the removeSet call to PageMaker module
       $usr_template = wire("templates")->get("user");
       $ufg = $usr_template->fieldgroup;
+
       $ufg->remove("{$prfx}_ref");
       $ufg->remove("{$prfx}_submission");
-      // $ufg->remove("{$prfx}_pending");
-      $ufg->remove("{$prfx}_tmp_pass");
+      $ufg->remove("{$prfx}_pending");
       $ufg->save();
 
       /*
@@ -574,7 +583,7 @@ class ProcessContactPages extends Process {
     if($this->input->post->submit) {
 
       // Process button clicks
-
+      $sanitizer = wire('sanitizer');
       $form = $this->modules->get("InputfieldForm");
       $form->processInput($this->input->post);
 
@@ -586,7 +595,7 @@ class ProcessContactPages extends Process {
         $submission = $this->sanitizer->text($this->input->post->submission); // Title of the submission page
 
         // Update submission status
-        $submission_page = wire("pages")->get("name=$submission");
+        $submission_page = wire("pages")->get("name=" . $sanitizer->selectorValue($submission));
 
         if( ! $submission_page->id){
 
@@ -664,12 +673,14 @@ class ProcessContactPages extends Process {
  */ 
   protected function getTable($submission_type) {
 
+    $sanitizer = wire('sanitizer');
     $table = $this->modules->get("MarkupAdminDataTable");
     $table->setEncodeEntities(false); // Parse form HTML
 
     $prfx = $this["prfx"];
     $parent_str = $this["paths"][$submission_type];
-    $submissions = wire("pages")->get($parent_str); // This is the Contacts or Registrations page - its children represent individual submitters whose children in turn hold details of each submission from that email address.
+
+    $submissions = wire("pages")->get($sanitizer->selectorValue($parent_str)); // This is the Contacts or Registrations page - its children represent individual submitters whose children in turn hold details of each submission from that email address.
     
     $records = array();
 
@@ -921,6 +932,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
  */
   protected function rejectRegistration($submission){
     
+    $sanitizer = wire('sanitizer');
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
     $u_name = $submission_data["username"];
@@ -933,8 +945,9 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $this->sendHTMLmail($email, "Your Registration Request", $message);
 
     // Remove user - make sure $u_name is a valid string as we don't want to delete the wrong user!
+
     if(is_string($u_name) && strlen($u_name)){
-      $rejected = wire("users")->get($u_name);
+      $rejected = wire("users")->get($sanitizer->selectorValue($u_name));
       wire("users")->delete($rejected);
     }
 
@@ -948,6 +961,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
  */
   protected function createUserAccount($options){
 
+    $sanitizer = wire('sanitizer');
     $username = $options["username"];
     $email = $options["email"];
     $pass = $options["pass"];
@@ -957,10 +971,10 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $errors = array();
 
     // Check for existing account with this email
-    if(wire("users")->get("email=$email")->id) $errors[] = "An account already exists for this email address";
+    if(wire("users")->get("email=" . $sanitizer->selectorValue($email))->id) $errors[] = "An account already exists for this email address";
 
     // Check for existing account with this username
-    if(wire("users")->get($username)->id) $errors[] = "An account exists for this user name.";
+    if(wire("users")->get($sanitizer->selectorValue($username))->id) $errors[] = "An account exists for this user name.";
 
     if(count($errors)) return array("error"=>implode(". ", $errors));
 
@@ -992,13 +1006,14 @@ protected function getTableRows($records, $column_keys, $submission_type){
  *
  * @param Page $submission - the submission page
  */
-protected function activateUserAccount($submission){
+  protected function activateUserAccount($submission){
 
+    $sanitizer = wire('sanitizer');
     $prfx = $this["prfx"];
     $submission_data = $this->getContactSubmission($submission["{$prfx}_submission"], true);
     $un = $submission_data["username"];
 
-    $u = wire("users")->get("name=$un");
+    $u = wire("users")->get("name=" . $sanitizer->selectorValue($un));
 
     if($u->id){
       $u->of(false);
@@ -1079,8 +1094,9 @@ protected function activateUserAccount($submission){
  */
   public function login($username, $pass){
 
-    $username = wire("sanitizer")->username($username);
-    $user = wire("users")->get("name=$username");
+    $sanitizer = wire("sanitizer");
+    $username = $sanitizer->username($username);
+    $user = wire("users")->get("name=" . $sanitizer->selectorValue($username));
 
     if($user->id){
 
