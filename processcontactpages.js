@@ -86,19 +86,28 @@ var Contact = (function () {
 	function processForm (e, submission_type) {
 
 		var token = document.getElementById('submission_token');
-    	var form = e.target.closest('form');
-    	var params = {
+		var form = e.target.closest('form');
+		var params = {
     		submission_type: submission_type
     	};
+		
 		for (var i = 0, ii = form.length; i < ii; ++i) {
+
 			var input = form[i];
-			if (input.name) {
-				if(uncheckedBox(input) || input.value.length < 1){
-					continue;
-				} else {
-					params[input.name] = input.value;
-				}
+
+			if (!input.name || input.value.length < 1) {
+				continue;
 			}
+
+			if(uncheckedBox(input)){
+				if(input.name === 'consent'){
+					// No go without consent
+					console.log('Consent is required to process the form');
+					return;
+				}
+				continue;
+			}
+			params[input.name] = input.value;
 		}
     	var settings = {
 			e: e,
@@ -138,18 +147,6 @@ var Contact = (function () {
 		xhttp.setRequestHeader('X-' + options.token.name, options.token.value);
 		xhttp.setRequestHeader('Content-type', 'application/json');
 		xhttp.send(JSON.stringify(options.ajaxdata));
-	}
-	function getToken (e) {
-
-		var id = getId (e);
-		var token = document.getElementById(id + '_token');
-		return {
-			name: token.name,
-			value: token.value
-		};
-	}
-	function getId (e) {
-		return e.target.dataset.context + e.target.dataset.sku;
 	}
 	function uncheckedBox (input) {
 		return input.type.toLowerCase() === 'checkbox' && !input.checked;
