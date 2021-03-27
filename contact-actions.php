@@ -6,13 +6,17 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 
 	$_input = file_get_contents("php://input");
 
-	if( ! $_input) return json_encode(array("success"=>false, "error"=>"The form contained no input"));
+	if( ! $_input){
+		return json_encode(array("success"=>false, "error"=>"The form contained no input"));
+	}
 
 	// Careful as user is NOT necessarily logged in
 	$req = json_decode($_input);
 	$pcp = wire("modules")->get("ProcessContactPages");
 
-	if( ! property_exists($req, "params")) return json_encode(array("success"=>false, "error"=>"The form contained no data"));
+	if( ! property_exists($req, "params")){
+		return json_encode(array("success"=>false, "error"=>"The form contained no data"));
+	}
 
 	$params = $req->params;
 	$bot = isset($params->website);
@@ -34,10 +38,14 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 	}
 
 	// Check consent
-	if( ! isset($params->consent)) return json_encode(array("success"=>false, "error"=>"Please consent to the storage of your information so we can process your message"));
+	if( ! isset($params->consent)){
+		return json_encode(array("success"=>false, "error"=>"Please consent to the storage of your information so we can process your message"));
+	}
 
 	// Check submission type
-	if( ! property_exists($params, "submission_type")) return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
+	if( ! property_exists($params, "submission_type")){
+		return json_encode(array("success"=>false, "error"=>"Unknown submission type"));
+	}
 
 	$submission_type = $params->submission_type;
 	unset($params->submission_type); // Don't want stored in submission field with other params. No need to sanitize as not user input
@@ -45,14 +53,17 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 	$sanitized = sanitizeSubmission($params, $submission_type, $sanitizer);
 
 	// Error string returned
-	if(gettype($sanitized) === "string") return json_encode(array("success"=>false, "error"=>$sanitized));
-
+	if(gettype($sanitized) === "string"){
+		return json_encode(array("success"=>false, "error"=>$sanitized));
+	}
 
 	// Validate password if present
 	if(property_exists($params, "pass")){
 
 		// Check password confirmation also exists
-		if( ! property_exists($params, "_pass")) return json_encode(array("success"=>false, "error"=>"Password confirmation required"));
+		if( ! property_exists($params, "_pass")){
+			return json_encode(array("success"=>false, "error"=>"Password confirmation required"));
+		}
 			
 		$pass_params = array("pass" => $params->pass, "_pass" => $params->_pass);
 		$p = new WireInputData($pass_params); 
@@ -61,7 +72,9 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 		$inputfield_pass->attr("name","pass"); // set the name
 		$inputfield_pass->processInput($p); // process and validate the field
 
-		if($inputfield_pass->getErrors()) return json_encode(array("success"=>false, "error"=>"Invalid password: " . implode(", ", $inputfield_pass->getErrors(true))));
+		if($inputfield_pass->getErrors()){
+			return json_encode(array("success"=>false, "error"=>"Invalid password: " . implode(", ", $inputfield_pass->getErrors(true))));
+		}
 
 		// Include validated password
 		$sanitized["pass"] = $params->pass;
@@ -71,7 +84,9 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 	// Form santized and validated - pass to ProcessContactPages module for processing
 	$submitted = $pcp->processSubmission($sanitized, $submission_type);
 
-	if($submitted["error"]) return json_encode(array("success"=>false, "error"=>$submitted["error"]));
+	if(is_string($submitted)){
+		return $submitted;
+	}
 
 	return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.")); 
 
@@ -130,20 +145,32 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 	    	case 'email':
 	    		$sanitized[$field] = $sanitizer->email($value);
 	    		// $sanitizer returns blank string if invalid
-				if( ! preg_match("/^([\w\-\.]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))$/", $sanitized[$field])) $errors[] = "Please enter a valid email";
+	    		if($submission_type === "registration"){
+	    			$exists = wire("users")->get("email=" . $sanitizer->selectorValue($sanitized[$field]))->id;
+	    			if($exists) $errors[] = "An account already exists for this email address";
+	    		}
+	    		if( ! preg_match("/^([\w\-\.]+)@((\[([0-9]{1,3}\.){3}[0-9]{1,3}\])|(([\w\-]+\.)+)([a-zA-Z]{2,4}))$/", $sanitized[$field])){
+	    			$errors[] = "Please enter a valid email";
+	    		}
 		      	break;
 
 	    	case 'username':
 	    		// 2nd arg to santizer = beautify returned name https://processwire.com/api/ref/sanitizer/name/
 	    		$sanitized[$field] = $sanitizer->name($value, true); 
 	    		$exists = wire("users")->get($sanitized[$field])->id;
-				if($exists) $errors[] = "Username unavailable - please try again";
-				if( ! preg_match("/^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/", $sanitized[$field])) $errors[] = "Please enter a username using only Letters, numbers, hyphens and underscores";
+				if($exists){
+					$errors[] = "Username unavailable - please try again";
+				}
+				if( ! preg_match("/^[A-Za-z0-9]+(?:[_-][A-Za-z0-9]+)*$/", $sanitized[$field])){
+					$errors[] = "Please enter a username using only Letters, numbers, hyphens and underscores";
+				}
 		      	break;
 
 	    	case 'url':
 	    		$sanitized[$field] = $sanitizer->url($value);
-	    		if( ! preg_match("/^(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})$/", $sanitized[$field])) $errors[] = "Please enter a valid website address";
+	    		if( ! preg_match("/^(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})$/", $sanitized[$field])){
+	    			$errors[] = "Please enter a valid website address";
+	    		}
 				break;
 
 	    	case 'message':
@@ -154,12 +181,16 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 	    	case 'address':
 	    		// Run $sanitizer->entities on this when outputting - see https://processwire.com/api/ref/sanitizer/text/
 	    		$sanitized[$field] = $sanitizer->textarea($value);
-	    		if( ! preg_match("/^[A-Za-z\d,. -]+$/m", $sanitized[$field])) $errors[] = "Please enter an address consisting only of Letters, numbers and spaces";
+	    		if( ! preg_match("/^[A-Za-z\d,. -]+$/m", $sanitized[$field])){
+	    			$errors[] = "Please enter an address consisting only of Letters, numbers and spaces";
+	    		}
 		      	break;
 
 	    	case 'postcode':
 	    		$sanitized[$field] = $sanitizer->alphanumeric($value);
-	    		if( ! preg_match("/^(([A-Za-z][0-9]{1,2})|(([A-Za-z][A-HJ-Ya-hj-ya][0-9]{1,2})|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-HJ-Ya-hj-y][0-9]?[A-Za-z]))))[\s]*[0-9][A-Za-z]{2}$/", $sanitized[$field])) $errors[] = "Please enter a valid postcode";
+	    		if( ! preg_match("/^(([A-Za-z][0-9]{1,2})|(([A-Za-z][A-HJ-Ya-hj-ya][0-9]{1,2})|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-HJ-Ya-hj-y][0-9]?[A-Za-z]))))[\s]*[0-9][A-Za-z]{2}$/", $sanitized[$field])){
+	    			$errors[] = "Please enter a valid postcode";
+	    		}
 	    		break;
 
 	    	case 'consent':	    		
