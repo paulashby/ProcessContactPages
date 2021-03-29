@@ -139,7 +139,7 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 
 	    	case 'tel':
 	    		$sanitized[$field] = $sanitizer->digits($value);
-		      	if(strlen($sanitized[$field]) !== 11) $errors[] = "Invalid telephone number, please try again";
+		      	if(strlen($sanitized[$field]) < 9) $errors[] = "Telephone number should have at least 9 digits";
 		      	break;
 
 	    	case 'email':
