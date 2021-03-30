@@ -1097,14 +1097,14 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $username = $sanitizer->username($username);
     $user = wire("users")->get("name=" . $sanitizer->selectorValue($username));
 
-    if($user->id){
+    if(!$user->id) return "Unknown user.";
 
-      $prfx = $this["prfx"];
+    $prfx = $this["prfx"];
 
-      if($user["{$prfx}_pending"] === 1){
-        return "Unable to complete login as this account is pending approval. Please try again when you receive your welcome email.";
-      }
-      return wire("session")->login($username, $pass);
+    if($user["{$prfx}_pending"] === 1){
+      return "Account awaiting approval.";
     }
+    return wire("session")->login($username, $pass);
+
   }
 }
