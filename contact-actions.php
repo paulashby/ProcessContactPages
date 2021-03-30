@@ -1,6 +1,8 @@
 <?php namespace ProcessWire;
 
-if( ! $config->ajax) throw new Wire404Exception();
+if( ! $config->ajax) {
+	throw new Wire404Exception();
+}
 
 if ($session->CSRF->hasValidToken('pcp_token')) {
 
