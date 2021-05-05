@@ -97,6 +97,10 @@ return json_encode(array("success"=>false, "error"=>"CSRF validation error"));
 
 function sanitizeSubmission($data, $submission_type, $sanitizer) {
 
+	if($submission_type === "catalogue") {
+		$data->message = "CATALOGUE REQUEST";
+	}
+
 	$requirements = array(
 		"contact" => array(
 			"fname"=>"first name", 
@@ -116,6 +120,15 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 			"postcode"=>"postcode", 
 			"url"=>"website address", 
 			"consent"=>"consent checkbox"
+		),
+		"catalogue" => array(
+			"fname"=>"first name", 
+			"lname"=>"last name", 
+			"email"=>"email", 
+			"message"=>"message", 
+			"address"=>"address", 
+			"postcode"=>"postcode", 
+			"consent"=>"consent checkbox"
 		)
 	);
 	$sanitized = array();
@@ -126,6 +139,7 @@ function sanitizeSubmission($data, $submission_type, $sanitizer) {
 			$errors[] = $label;
 		}
 	}
+
 	// Required fields missing
 	if(count($errors)) return "Please fill in the following fields: " . implode(", ", $errors);
 
