@@ -254,7 +254,7 @@ class ProcessContactPages extends Process {
           $handlers[] = $form_options["handler"];
         }
         $title = $form_options["title"];
-        $forms_out .= "<h2>$title</h2>";
+        $forms_out .= "<h2 class='form__title'>$title</h2>";
         $forms_out .= $markup;  
       }
     }
@@ -333,7 +333,14 @@ class ProcessContactPages extends Process {
     $prfx = $this["prfx"];
     $submitter_tmplt = "{$prfx}-submitter";
     $submitter_parent = "{$submission_type}s";
-    $parent_str = $this["paths"][$submitter_parent];
+
+    if(array_key_exists($submitter_parent, $this["paths"])){
+      $parent_str = $this["paths"][$submitter_parent];
+    } else {
+      // Default to contacts if path not set
+      $parent_str = $this["paths"]["contacts"];
+    }
+
 
     $submitter = wire("pages")->get("parent=" . $sanitizer->selectorValue($parent_str) . ",{$prfx}_email=" . $sanitizer->selectorValue($email));
     $registration = $submission_type === "registration";
@@ -357,7 +364,7 @@ class ProcessContactPages extends Process {
         "title" => $this->getID(),
         "{$prfx}_email" => $email
       );
-      // Make parent page for submissions fromm this email address
+      // Make parent page for submissions from this email address
       $submission_parent = wire("pages")->add($submitter_tmplt, $parent_str, $item_data);
     }
     // Use number of current submissions from this email address to get numerical suffix
@@ -366,7 +373,7 @@ class ProcessContactPages extends Process {
 
     $title_sffx = "-$submissions_from_usr";
     $submitter_tmplt = "{$prfx}-message";
-
+    
     /*
      * Registrations go straight to "Processed". So they show "Accepted"/"Rejected" buttons instead of a "Processed" button like Contacts.
      * This is because it turns out that 'backgound checks' for registrations only take a few mins, so the "Pending" to "Processed" stage is overkill
