@@ -1030,7 +1030,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $name = ucfirst($submission_data["fname"]);
 
       $message = array(
-        "Hi $name,","Great news - your account request has been approved and you can now log in using the username and password you set up when you registered."
+        "Hi $name,","Great news - your account request has been approved and you can now log in using the email and password you provided when you registered."
       );
       $this->sendHTMLmail($u->email, "Your new account", $message);
       $this->removeSubmission($submission);
