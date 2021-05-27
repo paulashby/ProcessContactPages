@@ -5,11 +5,15 @@ var Contact = (function () {
     var setup = {
     	success_callbacks : {
 	        contact: function (e, data) {
-	        	//TODO: Provide success feedback - need this for when return is hit after changing quantity
+	        	//TODO: Provide success feedback
 	        	console.log('contact callback');
 	        },
+	        catalogue: function (e, data) {
+	        	//TODO: Provide success feedback
+	        	console.log('catalogue callback');
+	        },
 	        registration: function (e, data) {
-	        	//TODO: Provide success feedback - need this for when return is hit after changing quantity
+	        	//TODO: Provide success feedback
 	        	console.log('registration callback');
 	        }
 	    }
@@ -36,6 +40,9 @@ var Contact = (function () {
 
 	    actions.contact = function (e) {
 	    	processForm(e, 'contact');
+		}
+		actions.catalogue = function (e) {
+	    	processForm(e, 'catalogue');
 		}
 		actions.registration = function (e) {
 	    	processForm(e, 'registration');
