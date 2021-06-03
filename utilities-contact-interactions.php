@@ -89,8 +89,14 @@ if ($session->CSRF->hasValidToken('pcp_token')) {
 	if(is_string($submitted)){
 		return $submitted;
 	}
-
-	return json_encode(array("success"=>true, "message"=>"Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.")); 
+	
+	$confirmation_message = array(
+		"contact" => "Thanks for your submission - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.",
+		"registration" => "Thanks for your account request - we'll get back to you as soon as possible. Please make sure to check your spam folder if you don't hear from us.",
+		"catalogue" => "Message received - a Paper Bird catalogue will be winging its way to you very soon!"
+	);
+	
+	return json_encode(array("success"=>true, "message"=>$confirmation_message[$submission_type])); 
 
 }
 return json_encode(array("success"=>false, "error"=>"CSRF validation error"));
