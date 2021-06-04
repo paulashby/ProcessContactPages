@@ -954,7 +954,10 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     if(is_string($u_name) && strlen($u_name)){
       $rejected = wire("users")->get($sanitizer->selectorValue($u_name));
-      wire("users")->delete($rejected);
+
+      if($rejected->id){
+        wire("users")->delete($rejected);
+      }     
     }
 
     return $this->removeSubmission($submission, "A rejection message has been sent to the email provided");
