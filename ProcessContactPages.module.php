@@ -255,7 +255,20 @@ class ProcessContactPages extends Process {
         }
         $title = $form_options["title"];
         $forms_out .= "<h2 class='form__title'>$title</h2>";
+
+        if(array_key_exists("pre", $form_options)) {
+          // Include any additional elements before form
+          $pre = $form_options["pre"];
+          $forms_out .= "<div class='pcp_pre'>$pre</div>";
+        }
+
         $forms_out .= $markup;  
+
+        if(array_key_exists("post", $form_options)) {
+          // Include any additional elements after form
+          $post = $form_options["post"];
+          $forms_out .= "<div class='pcp_post'>$post</div>";
+        }
       }
     }
     $out = "<div class='pcp_forms'>";
