@@ -353,8 +353,6 @@ class ProcessContactPages extends Process {
       // Default to contacts if path not set
       $parent_str = $this["paths"]["contacts"];
     }
-
-
     $submitter = wire("pages")->get("parent=" . $sanitizer->selectorValue($parent_str) . ",{$prfx}_email=" . $sanitizer->selectorValue($email));
     $registration = $submission_type === "registration";
 
@@ -364,13 +362,22 @@ class ProcessContactPages extends Process {
     }
     
     $params["timestamp"] = $this->timestampNow();
-    
+    $exists = wire("users")->get("email=" . $sanitizer->selectorValue($email))->id;
+
     if($submitter->id){
 
       $submission_parent = $submitter;
 
-      if($registration) return array("error"=>"A registration request for this email address is already being processed");
+      if($registration) {
+        // Pending request exists for this email address
+        $this->existingUserNotification($email, true);
+        return true;
+      }
     
+    } else if($registration && $exists){
+      // Email in use on existing account
+      $this->existingUserNotification($email);
+      return true;
     } else {
 
       $item_data = array(
@@ -475,6 +482,22 @@ class ProcessContactPages extends Process {
       return false;
     }
     throw new WireException("Privacy Policy page does not exist.");
+  }
+/**
+ * Send notification email when registraton is submitted for existing user
+ *
+ * @param String $to - the recipient
+ * @param Boolean $pending - true if an existing request is pending, else request is from user with active account
+ */
+  protected function existingUserNotification($to, $pending = false) {
+
+    if($pending){
+      $message = array("Hi,", "It looks like you submitted multiple registration requests on the Paper Bird site. To keep things simple, we'll only be able to process your initial request.", "Best wishes");
+    } else {
+      $message = array("Hi,", "It looks like you just tried to register on the Paper Bird website. The request wasn't processed as your email address is already in use on an existing account. If you've forgotten your password, you can reset it by clicking the 'Forgot Password?' link on the log in form.", "Best wishes");
+    }
+
+    $this->sendHTMLmail($to, "Registration Problem", $message);
   }
 /**
  * Custom uninstall 
@@ -991,12 +1014,6 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $encoded_submission = $options["encoded_submission"];
     $prfx = $this["prfx"];
     $errors = array();
-
-    // Check for existing account with this email
-    if(wire("users")->get("email=" . $sanitizer->selectorValue($email))->id) $errors[] = "An account already exists for this email address";
-
-    // Check for existing account with this username
-    if(wire("users")->get($sanitizer->selectorValue($username))->id) $errors[] = "An account exists for this user name.";
 
     if(count($errors)) return array("error"=>implode(". ", $errors));
 
