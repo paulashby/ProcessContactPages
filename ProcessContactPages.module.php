@@ -262,7 +262,7 @@ class ProcessContactPages extends Process {
           $forms_out .= "<div class='pcp_pre'>$pre</div>";
         }
 
-        $forms_out .= $markup;  
+        $forms_out .= $markup; 
 
         if(array_key_exists("post", $form_options)) {
           // Include any additional elements after form
@@ -1034,7 +1034,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $u->save();
     $u->of(true); 
     $message = array(
-      "Thank you for your registration request","We'll send a confirmation email as soon as it's all been set up for you."
+      "Thank you for your registration request.","We'll send a confirmation email as soon as it's all been set up for you."
     );
     $this->sendHTMLmail($u->email, "Your account registration", $message); 
 
