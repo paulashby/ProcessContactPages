@@ -1034,7 +1034,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     $u->save();
     $u->of(true); 
     $message = array(
-      "Thank you for your registration request.","We'll send a confirmation email as soon as it's all been set up for you."
+      "Thank you for your registration request.","We'll send a confirmation email as soon as it's all been set up for you. In the meantime please make sure to keep your log in details somewhere safe."
     );
     $this->sendHTMLmail($u->email, "Your account registration", $message); 
 
