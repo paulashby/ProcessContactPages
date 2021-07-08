@@ -15,6 +15,7 @@ class ProcessContactPages extends Process {
         "name" => "contact",
         "title" => "Contact",
       ],
+      "permission" => "contact-page-view"
     ];
   }
   public function ready() {
