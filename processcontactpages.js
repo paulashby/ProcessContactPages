@@ -4,17 +4,17 @@ var Contact = (function () {
 
     var setup = {
     	success_callbacks : {
+    		// Using separate callbacks in case we ever want to customise individual responses
+    		// Confimration messages provided by utilities-contact-interactions.php as already tailored to the request type
+
 	        contact: function (e, data) {
-	        	//TODO: Provide success feedback
-	        	console.log('contact callback');
+	        	showConfirmation(e, data);
 	        },
 	        catalogue: function (e, data) {
-	        	//TODO: Provide success feedback
-	        	console.log('catalogue callback');
+	        	showConfirmation(e, data);
 	        },
 	        registration: function (e, data) {
-	        	//TODO: Provide success feedback
-	        	console.log('registration callback');
+	        	showConfirmation(e, data);
 	        }
 	    }
 	};
@@ -46,21 +46,6 @@ var Contact = (function () {
 		}
 		actions.registration = function (e) {
 	    	processForm(e, 'registration');
-		}
-		actions.privacy = function (e) {
-
-	    	var token = document.getElementById('contact_token');
-	    	var settings = {
-				e: e,
-				action: 'submit',
-				token: {
-					name: token.name,
-					value: token.value
-				},
-				action_url: e.target.dataset.actionurl,
-				method: 'GET'
-			};
-			doAction(settings);
 		}
 	};
 	function dataAttrEventHandler (e, actions) {
@@ -132,6 +117,8 @@ var Contact = (function () {
 	function makeRequest (options) {
 
 		var xhttp = new XMLHttpRequest();
+		var submitting_form = $(options.event.target).closest('form');
+		var error_report = submitting_form.parent().find('.form__error--submission');
 
 		xhttp.onreadystatechange = function() {
 		    if (this.readyState == 4 && this.status == 200) {
@@ -143,6 +130,7 @@ var Contact = (function () {
 		    	if(response.error) {
 		    		//TODO: Does this need handling?
 		    		console.warn('Ajax call returned an error');
+		    		error_report.html(response.error).addClass('form__error--show');
 		    	} else {
 		    		// Route to appropriate callback
 		    		setup.success_callbacks[options.role](options.event, response);
@@ -154,6 +142,10 @@ var Contact = (function () {
 		xhttp.setRequestHeader('X-' + options.token.name, options.token.value);
 		xhttp.setRequestHeader('Content-type', 'application/json');
 		xhttp.send(JSON.stringify(options.ajaxdata));
+	}
+	function showConfirmation (e, data) {
+		var title = $('.form__title').html();
+		$('.pcp_forms').html("<h2 class='form__title'>" + title + "</h2><p class='form_message'>" + data.message + "</p>");
 	}
 	function uncheckedBox (input) {
 		return input.type.toLowerCase() === 'checkbox' && !input.checked;
