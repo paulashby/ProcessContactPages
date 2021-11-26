@@ -680,8 +680,9 @@ class ProcessContactPages extends Process {
     $out =  $this->getTable("contacts");
     $out .= $this->getTable("registrations");
     
+    /*
     $out .= "<br><br><small class='buttons remove-bttn'><a href='./confirm' class='ui-button ui-button--pop ui-button--remove ui-state-default '>Remove all contact data</a></small>";
-
+    */
     return $out;
   }
   public function ___executeConfirm() {
