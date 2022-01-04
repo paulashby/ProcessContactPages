@@ -1065,8 +1065,14 @@ protected function getTableRows($records, $column_keys, $submission_type){
       $name = ucfirst($submission_data["fname"]);
 
       $message = array(
-        "Hi $name,","Great news - your account request has been approved and you can now log in using the email and password you provided when you registered."
+        "Hi $name,",
+        "Great news - your account request has been approved and you can now log in using the email and password you provided when you registered."
       );
+
+      $tc_link = $this["ts_and_cs"];
+      if(strlen($tc_link)) {
+        $message[] = "<small>Please see <a href='$tc_link'>terms and conditions</a> for minimum order and carriage information.</small>";
+      }
       $this->sendHTMLmail($u->email, "Your new account", $message);
       $this->removeSubmission($submission);
     } else {

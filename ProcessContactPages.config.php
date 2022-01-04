@@ -40,5 +40,12 @@ $config = array(
 		"description" => "Please provide a comma-separated list of role names or IDs.",  
 		"value" => "", 
 		"requiredif" => "autoreg=1"
+	),
+	"tsAndCs" => array(
+		"name"=> "ts_and_cs",
+		"type" => "text",
+	    "label" => "Terms and Condtions page",
+	    "description" => "Optionally, enter a link for inclusion at bottom of welcome email.", 
+	    "required" => false
 	)
 );
