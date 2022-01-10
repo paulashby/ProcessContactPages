@@ -417,8 +417,10 @@ class ProcessContactPages extends Process {
 
     if($registration) {
 
+      // fname is now shop name, lname is contact name
       $account_settings = array(
         "username" => $username,
+        "display_name" => $params["lname"] . ", " . $params["fname"],
         "email" => $email,
         "pass" => $pass,
         "parent_title" => $submission->parent->title,
@@ -1010,6 +1012,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     $sanitizer = wire('sanitizer');
     $username = $options["username"];
+    $display_name = $options["display_name"];
     $email = $options["email"];
     $pass = $options["pass"];
     $parent_title = $options["parent_title"];
@@ -1028,6 +1031,13 @@ protected function getTableRows($records, $column_keys, $submission_type){
     foreach ($u_roles as $u_role){
       $u->addRole($u_role);
     }
+
+    if($this->modules->isInstalled("ProcessOrderPages")) {
+      $pop_data = $this->modules->getConfig("ProcessOrderPages");
+      $prfx = $pop_data["prfx"];      
+    }
+
+    $u["{$prfx}_display_name"] = $display_name;
     $u["{$prfx}_pending"] = 1;
     $u->email = $email;
     $u->pass = $pass;
