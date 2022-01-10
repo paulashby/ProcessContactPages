@@ -763,11 +763,11 @@ class ProcessContactPages extends Process {
         if(array_key_exists("fname", $submission_data)){
           // Concatonate first and last names
           if(array_key_exists("lname", $submission_data)){
-            $record["name"] = $submission_data["fname"] . " " . $submission_data["lname"];
+            $record["name"] = $submission_data["lname"] . ", " . $submission_data["fname"];
             unset($submission_data["fname"]);
             unset($submission_data["lname"]);
           } else{
-            throw new WireException("Postcode is required.");  
+            throw new WireException("Name is required.");  
           }
         }
         if(array_key_exists("address", $submission_data)){
