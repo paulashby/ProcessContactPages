@@ -1034,10 +1034,10 @@ protected function getTableRows($records, $column_keys, $submission_type){
 
     if($this->modules->isInstalled("ProcessOrderPages")) {
       $pop_data = $this->modules->getConfig("ProcessOrderPages");
-      $prfx = $pop_data["prfx"];      
+      $pop_prfx = $pop_data["prfx"];      
     }
 
-    $u["{$prfx}_display_name"] = $display_name;
+    $u["{$pop_prfx}_display_name"] = $display_name;
     $u["{$prfx}_pending"] = 1;
     $u->email = $email;
     $u->pass = $pass;
