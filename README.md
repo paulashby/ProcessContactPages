@@ -35,15 +35,15 @@ Retrieve HTML document markup using the name of the Processwire document page<br
 ```$contact->renderDocument("my-document");```
 
 Retrieve HTML form markup using the name of the Processwire form page<br />
-```$contact->renderForm("my-form");```
+```$contact->renderForm("my-form", "my-handler.js");```
+<br />Where the second argument is the path to the JavaScript form handler.
 
 Retrieve HTML markup for multiple forms:<br />
 ```$contact->renderForm($options);```<br />
-
 Where the options array contains an associative array for each form, detailing the following:
 - **title** - string: an optional title for the form<br />
 - **form** - string: the name of the Processwire form page<br />
-- **handler** - string: the path to a JavaScript form handler.
+- **handler** - string: the path to the JavaScript form handler.
 
 ### Managing form submissions
 Log into the back end of your site and go to the Contact admin page. Here you can view a list of contact form submissions and set their status as processed and ultimately resolved.
