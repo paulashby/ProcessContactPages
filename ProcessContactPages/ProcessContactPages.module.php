@@ -1115,7 +1115,7 @@ protected function getTableRows($records, $column_keys, $submission_type){
     <html xmlns='http://www.w3.org/1999/xhtml' lang='en-GB'>
     <head>
       <meta http-equiv='Content-Type' content='text/html; charset=UTF-8' />
-      <title>Email Test</title>
+      <title>$subject</title>
       <meta name='viewport' content='width=device-width, initial-scale=1.0'/>
 
       <style type='text/css'>
